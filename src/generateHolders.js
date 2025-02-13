@@ -19,35 +19,56 @@ if (!fs.existsSync(solariansMintListFilePath)) {
     console.error(`❌ Error: Missing ${solariansMintListFilePath}`);
     process.exit(1);
 }
-const solariansMintList = require(solariansMintListFilePath).solariansMintList;
+const solariansMintList = require(solariansMintListFilePath).solariansMintList || [];
 
-// ✅ Setup Solana Connection
-const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+if (solariansMintList.length === 0) {
+    console.error(`❌ Error: solariansMintList is empty!`);
+    process.exit(1);
+}
 
-// ✅ Load Verified Users & Extract Wallet Addresses
+// ✅ Setup Solana Connection (Use `processed` for the latest state)
+const rpcEndpoint = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta'); 
+const connection = new Connection(rpcEndpoint, 'processed');
+
+
+// ✅ Load Verified Users & Extract Wallet Info
 if (!fs.existsSync(verifiedFilePath)) {
     console.error(`❌ Error: Missing ${verifiedFilePath}`);
     process.exit(1);
 }
 const verifiedData = JSON.parse(fs.readFileSync(verifiedFilePath, 'utf8'));
-const walletAddresses = verifiedData
+const walletInfo = verifiedData
     .filter(user => user.verified) // Only verified users
-    .map(user => user.walletAddress); // Extract wallet addresses
+    .map(user => ({
+        discordId: user.discordId,
+        twitterHandle: user.twitterHandle || null, // Use null if not provided
+        walletAddress: user.walletAddress
+    }));
 
-console.log("✅ Found Wallet Addresses:", walletAddresses);
+console.log("✅ Found Wallets:", walletInfo.map(w => w.walletAddress));
 
-// 🔍 Function to Fetch Token Holdings for a Wallet
-async function getTokenAccounts(wallet) {
+// 🔍 Function to Fetch Token Holdings for a Wallet (Forcing Fresh Data)
+async function getTokenAccounts(wallet, retries = 3) {
     try {
         const publicKey = new PublicKey(wallet);
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') // SPL Token Program ID
-        });
 
-        // Extract token mints
-        return tokenAccounts.value.map(account => account.account.data.parsed.info.mint);
+        // 🔥 Force an update to avoid cached results
+        await connection.requestAirdrop(publicKey, 0).catch(() => {});
+
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
+            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+        }, 'processed'); // Use "processed" to avoid cached data
+
+        return tokenAccounts.value
+    .filter(account => account.account.data.parsed.info.tokenAmount.uiAmount > 0) // Only non-empty accounts
+    .map(account => account.account.data.parsed.info.mint);
+
     } catch (err) {
-        console.error(`❌ Error fetching tokens for ${wallet}:`, err);
+        console.error(`❌ Error fetching tokens for ${wallet}: ${err.message}`);
+        if (retries > 0) {
+            console.log(`🔄 Retrying (${3 - retries} attempts left)...`);
+            return getTokenAccounts(wallet, retries - 1);
+        }
         return [];
     }
 }
@@ -56,23 +77,27 @@ async function getTokenAccounts(wallet) {
 async function generateHoldersList() {
     const holders = {};
 
-    for (const wallet of walletAddresses) {
-        console.log(`🔎 Checking tokens for wallet: ${wallet}...`);
-        const tokens = await getTokenAccounts(wallet);
+    for (const user of walletInfo) {
+        console.log(`🔎 Checking tokens for wallet: ${user.walletAddress}...`);
+        const tokens = await getTokenAccounts(user.walletAddress);
 
         // ✅ Filter tokens that match Solarians Mint List
         const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
 
         if (matchingTokens.length > 0) {
-            holders[wallet] = matchingTokens;
-            console.log(`✅ ${wallet} holds ${matchingTokens.length} Solarians tokens.`);
+            holders[user.walletAddress] = {
+                discordId: user.discordId,
+                twitterHandle: user.twitterHandle,
+                tokens: matchingTokens
+            };
+            console.log(`✅ ${user.walletAddress} (${user.discordId}) holds ${matchingTokens.length} Solarians tokens.`);
         } else {
-            console.log(`⚠️ ${wallet} does not hold any Solarians tokens.`);
+            console.log(`⚠️ ${user.walletAddress} (${user.discordId}) does not hold any Solarians tokens.`);
         }
     }
 
-    // ✅ Ensure holders.json exists before writing
-    if (!fs.existsSync(holdersFilePath)) {
+    // ✅ Ensure holders.json exists and is valid JSON before writing
+    if (!fs.existsSync(holdersFilePath) || fs.readFileSync(holdersFilePath, 'utf8').trim() === '') {
         fs.writeFileSync(holdersFilePath, '{}');
     }
 
