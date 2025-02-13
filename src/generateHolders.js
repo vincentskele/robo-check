@@ -4,7 +4,7 @@ const path = require('path');
 const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
 
 // ----------------------
-// Define Paths & Ensure Data Directory (using process.cwd() for project-root based paths)
+// Define Paths & Ensure Data Directory
 // ----------------------
 const dataDir = path.join(process.cwd(), 'src/data');
 const holdersFile = path.join(dataDir, 'holders.json');
@@ -28,6 +28,7 @@ if (solariansMintList.length === 0) {
   console.error('❌ solariansMintList is empty!');
   process.exit(1);
 }
+console.log(`✅ Loaded ${solariansMintList.length} solarian mint(s)`);
 
 // ----------------------
 // Setup Solana Connection
@@ -42,7 +43,15 @@ if (!fs.existsSync(verifiedFile)) {
   console.error(`❌ Missing file: ${verifiedFile}`);
   process.exit(1);
 }
-const verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
+let verifiedUsers;
+try {
+  verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
+} catch (err) {
+  console.error(`❌ Failed to parse verified file: ${err.message}`);
+  process.exit(1);
+}
+console.log(`✅ Loaded ${verifiedUsers.length} verified user(s) from ${verifiedFile}`);
+
 const walletInfo = verifiedUsers
   .filter(user => user.verified)
   .map(user => ({
