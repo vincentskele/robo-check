@@ -3,111 +3,127 @@ const fs = require('fs');
 const path = require('path');
 const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
 
-// ✅ Define Paths
-const dataPath = path.join(__dirname, 'data');
-const holdersFilePath = path.join(dataPath, 'holders.json');
-const verifiedFilePath = path.join(dataPath, 'verified.json');
-const solariansMintListFilePath = path.join(dataPath, 'solarians-mintlist.json');
+// ----------------------
+// Define Paths & Ensure Data Directory (using process.cwd() for project-root based paths)
+// ----------------------
+const dataDir = path.join(process.cwd(), 'src/data');
+const holdersFile = path.join(dataDir, 'holders.json');
+const verifiedFile = path.join(dataDir, 'verified.json');
+const solariansFile = path.join(dataDir, 'solarians-mintlist.json');
 
-// ✅ Ensure `data/` directory exists
-if (!fs.existsSync(dataPath)) {
-    fs.mkdirSync(dataPath, { recursive: true });
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
-// ✅ Load Solarians Mint List
-if (!fs.existsSync(solariansMintListFilePath)) {
-    console.error(`❌ Error: Missing ${solariansMintListFilePath}`);
-    process.exit(1);
+// ----------------------
+// Load Solarians Mint List
+// ----------------------
+if (!fs.existsSync(solariansFile)) {
+  console.error(`❌ Missing file: ${solariansFile}`);
+  process.exit(1);
 }
-const solariansMintList = require(solariansMintListFilePath).solariansMintList || [];
-
+const solariansData = require(solariansFile);
+const solariansMintList = solariansData.solariansMintList || [];
 if (solariansMintList.length === 0) {
-    console.error(`❌ Error: solariansMintList is empty!`);
-    process.exit(1);
+  console.error('❌ solariansMintList is empty!');
+  process.exit(1);
 }
 
-// ✅ Setup Solana Connection (Use `processed` for the latest state)
-const rpcEndpoint = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta'); 
-const connection = new Connection(rpcEndpoint, 'processed');
+// ----------------------
+// Setup Solana Connection
+// ----------------------
+const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta');
+const connection = new Connection(rpcUrl, 'processed');
 
-// ✅ Load Verified Users & Extract Wallet Info
-if (!fs.existsSync(verifiedFilePath)) {
-    console.error(`❌ Error: Missing ${verifiedFilePath}`);
-    process.exit(1);
+// ----------------------
+// Load Verified Users & Extract Wallet Info
+// ----------------------
+if (!fs.existsSync(verifiedFile)) {
+  console.error(`❌ Missing file: ${verifiedFile}`);
+  process.exit(1);
 }
-const verifiedData = JSON.parse(fs.readFileSync(verifiedFilePath, 'utf8'));
-const walletInfo = verifiedData
-    .filter(user => user.verified) // Only verified users
-    .map(user => ({
-        discordId: user.discordId,
-        twitterHandle: user.twitterHandle || null, // Use null if not provided
-        walletAddress: user.walletAddress
-    }));
+const verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
+const walletInfo = verifiedUsers
+  .filter(user => user.verified)
+  .map(user => ({
+    walletAddress: user.walletAddress,
+    discordId: user.discordId,
+    twitterHandle: user.twitterHandle || null,
+  }));
 
-console.log("✅ Found Wallets:", walletInfo.map(w => w.walletAddress));
+console.log("✅ Found Wallets:", walletInfo.map(u => u.walletAddress));
 
-// 🔍 Function to Fetch Token Holdings for a Wallet (Forcing Fresh Data)
+// ----------------------
+// Function: Get Token Accounts for a Wallet
+// ----------------------
 async function getTokenAccounts(wallet, retries = 3) {
-    try {
-        const publicKey = new PublicKey(wallet);
+  try {
+    const pubkey = new PublicKey(wallet);
+    // Request a 0-lamport airdrop to force fresh data (ignoring any errors)
+    await connection.requestAirdrop(pubkey, 0).catch(() => {});
 
-        // 🔥 Force an update to avoid cached results
-        await connection.requestAirdrop(publicKey, 0).catch(() => {});
+    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+      pubkey,
+      { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') },
+      'processed'
+    );
 
-        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-            programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-        }, 'processed'); // Use "processed" to avoid cached data
-
-        return tokenAccounts.value
-            .filter(account => account.account.data.parsed.info.tokenAmount.uiAmount > 0) // Only non-empty accounts
-            .map(account => account.account.data.parsed.info.mint);
-
-    } catch (err) {
-        console.error(`❌ Error fetching tokens for ${wallet}: ${err.message}`);
-        if (retries > 0) {
-            console.log(`🔄 Retrying (${3 - retries} attempts left)...`);
-            return getTokenAccounts(wallet, retries - 1);
-        }
-        return [];
+    return tokenAccounts.value
+      .filter(acc => acc.account.data.parsed.info.tokenAmount.uiAmount > 0)
+      .map(acc => acc.account.data.parsed.info.mint);
+  } catch (err) {
+    console.error(`❌ Error fetching tokens for wallet ${wallet}: ${err.message}`);
+    if (retries > 0) {
+      console.log(`🔄 Retrying (${retries} attempt(s) left)...`);
+      return getTokenAccounts(wallet, retries - 1);
     }
+    return [];
+  }
 }
 
-// 🔥 Generate Holders List
+// ----------------------
+// Function: Generate Holders List
+// ----------------------
 async function generateHoldersList() {
-    console.log(`🔄 Running generateHolders.js at ${new Date().toLocaleTimeString()}`);
-    const holders = {};
+  console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
+  const holders = [];
 
-    for (const user of walletInfo) {
-        console.log(`🔎 Checking tokens for wallet: ${user.walletAddress}...`);
-        const tokens = await getTokenAccounts(user.walletAddress);
+  for (const user of walletInfo) {
+    console.log(`🔎 Checking wallet: ${user.walletAddress}`);
+    const tokens = await getTokenAccounts(user.walletAddress);
+    // Filter tokens matching the Solarians Mint List
+    const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
 
-        // ✅ Filter tokens that match Solarians Mint List
-        const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
-
-        if (matchingTokens.length > 0) {
-            holders[user.walletAddress] = {
-                discordId: user.discordId,
-                twitterHandle: user.twitterHandle,
-                tokens: matchingTokens
-            };
-            console.log(`✅ ${user.walletAddress} (${user.discordId}) holds ${matchingTokens.length} Solarians tokens.`);
-        } else {
-            console.log(`⚠️ ${user.walletAddress} (${user.discordId}) does not hold any Solarians tokens.`);
-        }
+    if (matchingTokens.length > 0) {
+      holders.push({
+        walletAddress: user.walletAddress,
+        discordId: user.discordId,
+        twitterHandle: user.twitterHandle,
+        token: matchingTokens[0],    // First matching token
+        solarians: matchingTokens,   // All matching tokens
+      });
+      console.log(`✅ ${user.walletAddress} holds ${matchingTokens.length} solarian token(s).`);
+    } else {
+      console.log(`⚠️ ${user.walletAddress} holds no solarian tokens.`);
     }
+  }
 
-    // ✅ Ensure holders.json exists and is valid JSON before writing
-    if (!fs.existsSync(holdersFilePath) || fs.readFileSync(holdersFilePath, 'utf8').trim() === '') {
-        fs.writeFileSync(holdersFilePath, '{}');
-    }
-
-    // ✅ Save Holders Data to JSON File
-    fs.writeFileSync(holdersFilePath, JSON.stringify(holders, null, 2));
-    console.log(`🎉 Holders list successfully updated at ${new Date().toLocaleTimeString()}`);
+  try {
+    fs.writeFileSync(holdersFile, JSON.stringify(holders, null, 2));
+    console.log(`🎉 Holders list updated at ${new Date().toLocaleString()}`);
+    console.log(`📝 File written to: ${holdersFile}`);
+  } catch (err) {
+    console.error(`❌ Failed to write holders file: ${err.message}`);
+  }
 }
 
-// ✅ Run Immediately & Then Periodically Based on ENV
-const INTERVAL = process.env.GENERATE_HOLDERS_INTERVAL || 900000; // Default: 15 minutes (in ms)
+// ----------------------
+// Run Immediately & Set Interval
+// ----------------------
+const intervalMs = process.env.GENERATE_HOLDERS_INTERVAL
+  ? parseInt(process.env.GENERATE_HOLDERS_INTERVAL)
+  : 900000; // Default: 15 minutes
+
 generateHoldersList();
-setInterval(generateHoldersList, INTERVAL);
-console.log(`⏳ generateHolders.js will run every ${INTERVAL / 60000} minutes.`);
+setInterval(generateHoldersList, intervalMs);
+console.log(`⏳ generateHolders.js will run every ${intervalMs / 60000} minute(s).`);
