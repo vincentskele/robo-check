@@ -65,7 +65,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 <p>Amount to send: <strong>${data.amount} SOL</strong></p>
                 <p>Send to wallet: <strong>${displayAddress}</strong></p>
                 <p>Expires at: <strong>${new Date(data.expiresAt).toLocaleString()}</strong></p>
-                <p style="color: blue;">Please send the exact amount to the provided wallet address before expiration.</p>
+                <p>Please send the exact amount to the provided wallet address before expiration.</p>
             `;
 
         } catch (error) {
