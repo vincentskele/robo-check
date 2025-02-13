@@ -3,3 +3,4 @@
 node_modules/
 src/data/holders.json
 src/data/verified.json
+src/data/tokens.json
