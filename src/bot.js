@@ -65,5 +65,9 @@ client.once('ready', async () => {
     }
 });
 
+// Log the bot port
+const botPort = process.env.BOT_PORT || 3000;
+console.log(`🌐 Bot is running on port ${botPort}`);
+
 // Log in to Discord
 client.login(process.env.TOKEN);
