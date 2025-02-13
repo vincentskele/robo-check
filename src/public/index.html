@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robo-Check Verification</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Robo-Check Verification</h1>
+
+  <form id="verificationForm">
+    <label for="discordId">Discord ID:</label>
+    <input type="text" id="discordId" name="discordId" required>
+    <br>
+
+    <label for="twitterHandle">Twitter Handle:</label>
+    <input type="text" id="twitterHandle" name="twitterHandle" required>
+    <br>
+
+    <label for="walletAddress">Your Solana Wallet:</label>
+    <input type="text" id="walletAddress" name="walletAddress" required>
+    <br>
+
+    <button type="submit">Generate Verification</button>
+  </form>
+
+  <div id="verificationResult"></div>
+
+  <script src="main.js"></script>
+</body>
+</html>
