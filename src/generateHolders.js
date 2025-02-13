@@ -4,7 +4,7 @@ const path = require('path');
 const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
 
 // ----------------------
-// Define Paths & Ensure Data Directory
+// Define Paths using process.cwd() so we work from your project root
 // ----------------------
 const dataDir = path.join(process.cwd(), 'src/data');
 const holdersFile = path.join(dataDir, 'holders.json');
@@ -16,18 +16,23 @@ if (!fs.existsSync(dataDir)) {
 }
 
 // ----------------------
-// Load Solarians Mint List
+// Function: Load Solarians Mint List
 // ----------------------
-if (!fs.existsSync(solariansFile)) {
-  console.error(`❌ Missing file: ${solariansFile}`);
-  process.exit(1);
+function loadSolariansMintList() {
+  if (!fs.existsSync(solariansFile)) {
+    console.error(`❌ Missing file: ${solariansFile}`);
+    process.exit(1);
+  }
+  const solariansData = require(solariansFile);
+  const solariansMintList = solariansData.solariansMintList || [];
+  if (solariansMintList.length === 0) {
+    console.error('❌ solariansMintList is empty!');
+    process.exit(1);
+  }
+  return solariansMintList;
 }
-const solariansData = require(solariansFile);
-const solariansMintList = solariansData.solariansMintList || [];
-if (solariansMintList.length === 0) {
-  console.error('❌ solariansMintList is empty!');
-  process.exit(1);
-}
+
+const solariansMintList = loadSolariansMintList();
 console.log(`✅ Loaded ${solariansMintList.length} solarian mint(s)`);
 
 // ----------------------
@@ -37,30 +42,22 @@ const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta');
 const connection = new Connection(rpcUrl, 'processed');
 
 // ----------------------
-// Load Verified Users & Extract Wallet Info
+// Function: Load Verified Users Each Cycle
 // ----------------------
-if (!fs.existsSync(verifiedFile)) {
-  console.error(`❌ Missing file: ${verifiedFile}`);
-  process.exit(1);
+function loadVerifiedUsers() {
+  if (!fs.existsSync(verifiedFile)) {
+    console.error(`❌ Missing file: ${verifiedFile}`);
+    process.exit(1);
+  }
+  try {
+    const verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
+    console.log(`✅ Loaded ${verifiedUsers.length} verified user(s) from ${verifiedFile}`);
+    return verifiedUsers;
+  } catch (err) {
+    console.error(`❌ Failed to parse verified file: ${err.message}`);
+    process.exit(1);
+  }
 }
-let verifiedUsers;
-try {
-  verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
-} catch (err) {
-  console.error(`❌ Failed to parse verified file: ${err.message}`);
-  process.exit(1);
-}
-console.log(`✅ Loaded ${verifiedUsers.length} verified user(s) from ${verifiedFile}`);
-
-const walletInfo = verifiedUsers
-  .filter(user => user.verified)
-  .map(user => ({
-    walletAddress: user.walletAddress,
-    discordId: user.discordId,
-    twitterHandle: user.twitterHandle || null,
-  }));
-
-console.log("✅ Found Wallets:", walletInfo.map(u => u.walletAddress));
 
 // ----------------------
 // Function: Get Token Accounts for a Wallet
@@ -70,13 +67,11 @@ async function getTokenAccounts(wallet, retries = 3) {
     const pubkey = new PublicKey(wallet);
     // Request a 0-lamport airdrop to force fresh data (ignoring any errors)
     await connection.requestAirdrop(pubkey, 0).catch(() => {});
-
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
       pubkey,
       { programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') },
       'processed'
     );
-
     return tokenAccounts.value
       .filter(acc => acc.account.data.parsed.info.tokenAmount.uiAmount > 0)
       .map(acc => acc.account.data.parsed.info.mint);
@@ -95,6 +90,19 @@ async function getTokenAccounts(wallet, retries = 3) {
 // ----------------------
 async function generateHoldersList() {
   console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
+  
+  // Re-read verified users on each cycle
+  const verifiedUsers = loadVerifiedUsers();
+  const walletInfo = verifiedUsers
+    .filter(user => user.verified)
+    .map(user => ({
+      walletAddress: user.walletAddress,
+      discordId: user.discordId,
+      twitterHandle: user.twitterHandle || null,
+    }));
+
+  console.log("✅ Found Wallets:", walletInfo.map(u => u.walletAddress));
+
   const holders = [];
 
   for (const user of walletInfo) {
