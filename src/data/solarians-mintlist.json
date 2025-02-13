@@ -1,5 +1,5 @@
-// Source: api.solarians.click/mintlist
-export const SOLARIANS_MINT_ADDRESSES =[
+{
+  "solariansMintList": [
   "CF8yKwxaFoJjAz3kRamiMCBLsEtqvmBfBEKEaxRsRFMd",
   "2j243q6c14SR5iZF2dxDtXL5rPHZxAEnskxQhM5r7GCF",
   "F4v4hw3vBmZ1PXRWpGqHE59vRwparX828t4EoddfX5dh",
@@ -5248,4 +5248,5 @@ export const SOLARIANS_MINT_ADDRESSES =[
   "2pfk3pybcfRmrDvk2TvpCUP3y4zbqMgPZjk2ePABGJRe",
   "2tJKdyuV6HmpfKGGJc9AuY6i7rokFvospu5Chq4VcpRy",
   "3v9YZACDKKhbWn52aSGQhoeW7cNHV9RYfgKRVJv5qarq",
-  "6rWvMQtiPMhnTVDV8rmuYQwRf5A"];
+  "6rWvMQtiPMhnTVDV8rmuYQwRf5A"]
+  }
