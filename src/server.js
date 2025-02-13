@@ -45,16 +45,29 @@ if (!fs.existsSync(tokensFile) || fs.statSync(tokensFile).size === 0) {
     fs.writeFileSync(tokensFile, JSON.stringify([], null, 2));
 }
 
-// ✅ Helper Function to Read Tokens Safely
+// ✅ Helper Function to Read Tokens and Auto-Cleanup Expired Entries
 const readTokens = () => {
     try {
         const fileContents = fs.readFileSync(tokensFile, 'utf8');
-        return fileContents ? JSON.parse(fileContents) : [];
+        let tokens = fileContents ? JSON.parse(fileContents) : [];
+        const now = Date.now();
+
+        // Filter out expired tokens dynamically when accessed
+        const validTokens = tokens.filter(entry => entry.expiresAt > now);
+
+        // If expired tokens were found, update the file
+        if (validTokens.length !== tokens.length) {
+            console.log(`🗑️ Auto-removed ${tokens.length - validTokens.length} expired requests`);
+            writeTokens(validTokens);
+        }
+
+        return validTokens;
     } catch (error) {
         console.error("❌ Error reading tokens.json:", error);
         return [];
     }
 };
+
 
 // ✅ Helper Function to Write Tokens Safely
 const writeTokens = (tokens) => {
@@ -130,8 +143,6 @@ app.post('/payment-request', (req, res) => {
     });
 });
 
-// ✅ Background Cleanup Every 5 Minutes
-setInterval(cleanupExpiredRequests, 5 * 60 * 1000);
 
 // ✅ Start the Server
 app.listen(PORT, () => {
