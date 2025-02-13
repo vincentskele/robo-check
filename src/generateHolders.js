@@ -30,7 +30,6 @@ if (solariansMintList.length === 0) {
 const rpcEndpoint = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta'); 
 const connection = new Connection(rpcEndpoint, 'processed');
 
-
 // ✅ Load Verified Users & Extract Wallet Info
 if (!fs.existsSync(verifiedFilePath)) {
     console.error(`❌ Error: Missing ${verifiedFilePath}`);
@@ -60,8 +59,8 @@ async function getTokenAccounts(wallet, retries = 3) {
         }, 'processed'); // Use "processed" to avoid cached data
 
         return tokenAccounts.value
-    .filter(account => account.account.data.parsed.info.tokenAmount.uiAmount > 0) // Only non-empty accounts
-    .map(account => account.account.data.parsed.info.mint);
+            .filter(account => account.account.data.parsed.info.tokenAmount.uiAmount > 0) // Only non-empty accounts
+            .map(account => account.account.data.parsed.info.mint);
 
     } catch (err) {
         console.error(`❌ Error fetching tokens for ${wallet}: ${err.message}`);
@@ -75,6 +74,7 @@ async function getTokenAccounts(wallet, retries = 3) {
 
 // 🔥 Generate Holders List
 async function generateHoldersList() {
+    console.log(`🔄 Running generateHolders.js at ${new Date().toLocaleTimeString()}`);
     const holders = {};
 
     for (const user of walletInfo) {
@@ -103,8 +103,11 @@ async function generateHoldersList() {
 
     // ✅ Save Holders Data to JSON File
     fs.writeFileSync(holdersFilePath, JSON.stringify(holders, null, 2));
-    console.log(`🎉 Holders list successfully generated at ${holdersFilePath}`);
+    console.log(`🎉 Holders list successfully updated at ${new Date().toLocaleTimeString()}`);
 }
 
-// 🚀 Run the Script
+// ✅ Run Immediately & Then Periodically Based on ENV
+const INTERVAL = process.env.GENERATE_HOLDERS_INTERVAL || 900000; // Default: 15 minutes (in ms)
 generateHoldersList();
+setInterval(generateHoldersList, INTERVAL);
+console.log(`⏳ generateHolders.js will run every ${INTERVAL / 60000} minutes.`);
