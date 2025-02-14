@@ -17,7 +17,7 @@ app.use(express.json());
 app.use(cors()); // Enable CORS if frontend requests are from a different origin
 
 // ✅ Serve Static Files
-const publicPath = path.join(__dirname, 'public');
+const publicPath = path.resolve(__dirname, 'public');
 app.use(express.static(publicPath));
 
 // ✅ Serve `index.html` as the default route
