@@ -11,8 +11,8 @@ const client = new Client({
 });
 
 // ✅ Define file paths for JSON data
-const holdersFilePath = path.join(__dirname, 'data', 'holders.json');
-const verifiedFilePath = path.join(__dirname, 'data', 'verified.json');
+const holdersFilePath = path.join(__dirname, 'src/data', 'holders.json');
+const verifiedFilePath = path.join(__dirname, 'src/data', 'verified.json');
 
 // ✅ Function to Check and Update Roles
 async function updateRoles() {
