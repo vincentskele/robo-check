@@ -153,3 +153,30 @@ button:hover {
   box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
   text-align: center;
 }
+
+/* Responsive adjustments for small screens */
+@media (max-width: 480px) {
+  body {
+    font-size: 10px; /* Slightly smaller font for readability */
+    padding: 10px;
+  }
+
+  h1 {
+    font-size: 1.5rem; /* Reduce heading size */
+  }
+
+  form, #verificationResult {
+    width: 100%; /* Ensure full width usage */
+    padding: 15px; /* Reduce padding */
+  }
+
+  input[type="text"] {
+    font-size: 10px; /* Adjust input font size */
+    padding: 6px;
+  }
+
+  button {
+    font-size: 10px;
+    padding: 8px; /* Adjust button padding */
+  }
+}
