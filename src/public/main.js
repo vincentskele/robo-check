@@ -79,7 +79,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const displayAddress = vanityAddress || data.receivingAddress;
 
             resultBox.innerHTML = `
-                <p>✅ <strong>Verification Generated</strong></p>
+                <p> <strong>Verification Generated</strong></p>
                 <p>Amount to send: <strong>${data.amount} SOL</strong></p>
                 <p>Send to wallet: <strong>${displayAddress}</strong></p>
                 <p>Expires at: <strong>${new Date(data.expiresAt).toLocaleString()}</strong></p>
@@ -106,7 +106,7 @@ socket.addEventListener("message", (event) => {
     if (data.status === "confirmed" && data.walletAddress) {
         const resultBox = document.getElementById('verificationResult');
         resultBox.innerHTML = `
-            <p>✅ <strong>Payment Confirmed!</strong></p>
+            <p>✅ <strong>Confirmed!</strong></p>
             <p>Your transaction of <strong>${data.amount} SOL</strong> has been successfully received.</p>
             <p>Thank you for completing the verification! Please allow 15-45 for roles to show up</p>
         `;
