@@ -35,8 +35,26 @@ document.addEventListener("DOMContentLoaded", function () {
         const walletAddress = document.getElementById('walletAddress').value.trim();
         const resultBox = document.getElementById('verificationResult');
 
-        if (!discordId || !twitterHandle || !walletAddress) {
-            resultBox.innerHTML = `<p style="color: red;">❌ All fields are required.</p>`;
+        // Validation Patterns
+        const discordIdPattern = /^\d{18}$/; // Exactly 18 digits
+        const twitterPattern = /^[A-Za-z0-9_]{1,15}$/; // Alphanumeric + underscore, max 15 chars
+        const solanaAddressPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/; // Base58 encoding, 32-44 chars
+
+        // Validation Checks
+        if (!discordIdPattern.test(discordId)) {
+            resultBox.innerHTML = `<p>❌ Invalid Discord ID. Must be exactly 18 digits.</p>`;
+            submitButton.disabled = false;
+            return;
+        }
+
+        if (!twitterPattern.test(twitterHandle)) {
+            resultBox.innerHTML = `<p>❌ Invalid Twitter Username. Only letters, numbers, and underscores allowed (max 15 chars).</p>`;
+            submitButton.disabled = false;
+            return;
+        }
+
+        if (!solanaAddressPattern.test(walletAddress)) {
+            resultBox.innerHTML = `<p>❌ Invalid Solana Wallet Address. Must be 32-44 characters long and base58 encoded.</p>`;
             submitButton.disabled = false;
             return;
         }
@@ -50,7 +68,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                resultBox.innerHTML = `<p style="color: red;">❌ Error: ${errorText || response.statusText}</p>`;
+                resultBox.innerHTML = `<p>❌ Error: ${errorText || response.statusText}</p>`;
                 submitButton.disabled = false;
                 return;
             }
@@ -69,7 +87,7 @@ document.addEventListener("DOMContentLoaded", function () {
             `;
 
         } catch (error) {
-            resultBox.innerHTML = `<p style="color: red;">❌ An error occurred: ${error.message}</p>`;
+            resultBox.innerHTML = `<p>❌ An error occurred: ${error.message}</p>`;
             console.error("❌ Verification Error:", error);
         }
 
