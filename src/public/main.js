@@ -92,5 +92,34 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         submitButton.disabled = false;
+
+        // ✅ WebSocket connection to listen for payment confirmations
+const socket = new WebSocket("ws://localhost:4000");
+
+socket.addEventListener("open", () => {
+    console.log("✅ WebSocket connected. Listening for payment confirmations...");
+});
+
+socket.addEventListener("message", (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.status === "confirmed" && data.walletAddress) {
+        const resultBox = document.getElementById('verificationResult');
+        resultBox.innerHTML = `
+            <p>✅ <strong>Payment Confirmed!</strong></p>
+            <p>Your transaction of <strong>${data.amount} SOL</strong> has been successfully received.</p>
+            <p>Thank you for completing the verification! Please allow 15-45 for roles to show up</p>
+        `;
+    }
+});
+
+socket.addEventListener("close", () => {
+    console.log("❌ WebSocket connection closed.");
+});
+
+socket.addEventListener("error", (error) => {
+    console.error("❌ WebSocket Error:", error);
+});
+
     });
 });
