@@ -42,7 +42,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Validation Checks
         if (!discordIdPattern.test(discordId)) {
-            resultBox.innerHTML = `<p>❌ Invalid Discord ID. Must be exactly 18 digits.</p>`;
+            resultBox.innerHTML = `<p>❌ Invalid Discord ID. Must be exactly 18 digits.</p><p>To obtain your discord ID you can send message &#92;@username</p>
+`;
             submitButton.disabled = false;
             return;
         }
