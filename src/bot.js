@@ -1,256 +1,187 @@
 require('dotenv').config();
-const { 
-    Client, 
-    GatewayIntentBits, 
-    REST, 
-    Routes, 
-    SlashCommandBuilder, 
-    ModalBuilder, 
-    TextInputBuilder, 
-    TextInputStyle, 
-    ActionRowBuilder 
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require('discord.js');
-const WebSocket = require('ws');
-const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
+const WebSocket = require('ws');
 
-// ✅ Ensure API_BASE_URL Defaults Correctly
+// === Load and Validate Environment Variables ===
 const API_BASE_URL = process.env.API_BASE_URL?.trim() || "http://localhost:3000";
-const WS_URL = process.env.WS_URL?.trim() || "ws://localhost:4000";
+const WEBSOCKET_URL = process.env.WEBSOCKET_URL?.trim() || "ws://localhost:4000";
+const REQUIRED_ENV_VARS = ["TOKEN", "CLIENT_ID", "GUILD_ID", "HOLDER_ROLE_ID", "ROLE_ID"];
 
-// ✅ Validate Environment Variables
-const REQUIRED_ENV_VARS = ["TOKEN", "CLIENT_ID", "GUILD_ID"];
-REQUIRED_ENV_VARS.forEach((varName) => {
-    if (!process.env[varName]) {
-        console.error(`❌ ERROR: Missing required environment variable: ${varName}`);
-        process.exit(1);
-    }
+REQUIRED_ENV_VARS.forEach(varName => {
+  if (!process.env[varName]) {
+    console.error(`❌ ERROR: Missing required environment variable: ${varName}`);
+    process.exit(1);
+  }
 });
 
-// ✅ Initialize Bot
+// === Initialize Bot ===
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers
-    ]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
-// ✅ Define File Paths for JSON Data
+// === Debugging Logs ===
+console.log(`🌎 API_BASE_URL: ${API_BASE_URL}`);
+console.log(`🔗 WEBSOCKET_URL: ${WEBSOCKET_URL}`);
+
+// === Define File Paths for Data Storage ===
 const holdersFilePath = path.join(__dirname, 'data', 'holders.json');
 const verifiedFilePath = path.join(__dirname, 'data', 'verified.json');
 
-// ✅ Slash Commands Setup
+// === Register Slash Commands on Startup ===
 const commands = [
-    new SlashCommandBuilder()
-        .setName('verify')
-        .setDescription('Start the verification process')
-].map(command => command.toJSON());
+  new SlashCommandBuilder()
+    .setName('verify')
+    .setDescription('Start the verification process')
+].map(cmd => cmd.toJSON());
 
-// ✅ Deploy Commands on Bot Startup
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
-    try {
-        console.log("🔄 Refreshing application (/) commands...");
-        await rest.put(
-            Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
-            { body: commands }
-        );
-        console.log("✅ Slash commands registered successfully!");
-    } catch (error) {
-        console.error("❌ Error registering commands:", error);
-    }
+  try {
+    console.log("🔄 Refreshing application (/) commands...");
+    await rest.put(
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+      { body: commands }
+    );
+    console.log("✅ Slash commands registered successfully!");
+  } catch (error) {
+    console.error("❌ Error registering commands:", error);
+  }
 })();
 
-// ✅ Function to Check and Update Roles
+// === Function to Check and Update Roles ===
 async function updateRoles() {
-    console.log(`🔄 Checking for updates in JSON files...`);
+  console.log("🔄 Checking for role updates...");
 
-    const guild = await client.guilds.fetch(process.env.GUILD_ID);
-    if (!guild) {
-        console.error("❌ Guild not found!");
-        return;
+  const guild = await client.guilds.fetch(process.env.GUILD_ID);
+  if (!guild) {
+    console.error("❌ Guild not found!");
+    return;
+  }
+
+  const holderRole = await guild.roles.fetch(process.env.HOLDER_ROLE_ID);
+  const verifiedRole = await guild.roles.fetch(process.env.ROLE_ID);
+
+  if (!holderRole || !verifiedRole) {
+    console.error("❌ One or more roles not found!");
+    return;
+  }
+
+  let holders = {}, verified = {};
+  try {
+    if (fs.existsSync(holdersFilePath)) {
+      holders = JSON.parse(fs.readFileSync(holdersFilePath, 'utf8'));
     }
-
-    const holderRole = await guild.roles.fetch(process.env.HOLDER_ROLE_ID);
-    const verifiedRole = await guild.roles.fetch(process.env.ROLE_ID);
-
-    if (!holderRole || !verifiedRole) {
-        console.error("❌ One or more roles not found!");
-        return;
+    if (fs.existsSync(verifiedFilePath)) {
+      verified = JSON.parse(fs.readFileSync(verifiedFilePath, 'utf8'));
     }
+  } catch (err) {
+    console.error("❌ Error reading JSON files:", err);
+    return;
+  }
 
-    let holders = {}, verified = {};
+  const holderDiscordIds = new Set(Object.values(holders).map(h => h.discordId));
+  const verifiedDiscordIds = new Set(Object.values(verified).map(v => v.discordId));
+
+  console.log(`✅ Holders: ${holderDiscordIds.size}, Verified: ${verifiedDiscordIds.size}`);
+
+  // Fetch all guild members and update roles
+  const members = await guild.members.fetch();
+  for (const [userId, member] of members) {
     try {
-        if (fs.existsSync(holdersFilePath)) holders = JSON.parse(fs.readFileSync(holdersFilePath, 'utf8'));
-        if (fs.existsSync(verifiedFilePath)) verified = JSON.parse(fs.readFileSync(verifiedFilePath, 'utf8'));
+      // Update Holder Role
+      if (holderDiscordIds.has(userId) && !member.roles.cache.has(holderRole.id)) {
+        await member.roles.add(holderRole);
+        console.log(`✅ Assigned holder role to ${member.user.tag}`);
+      } else if (!holderDiscordIds.has(userId) && member.roles.cache.has(holderRole.id)) {
+        await member.roles.remove(holderRole);
+        console.log(`❌ Removed holder role from ${member.user.tag}`);
+      }
+
+      // Update Verified Role
+      if (verifiedDiscordIds.has(userId) && !member.roles.cache.has(verifiedRole.id)) {
+        await member.roles.add(verifiedRole);
+        console.log(`✅ Assigned verified role to ${member.user.tag}`);
+      } else if (!verifiedDiscordIds.has(userId) && member.roles.cache.has(verifiedRole.id)) {
+        await member.roles.remove(verifiedRole);
+        console.log(`❌ Removed verified role from ${member.user.tag}`);
+      }
     } catch (err) {
-        console.error("❌ Error reading JSON files:", err);
-        return;
+      console.error(`❌ Failed to update roles for ${member.user.tag}:`, err);
     }
-
-    const holderDiscordIds = new Set(Object.values(holders).map(holder => holder.discordId));
-    const verifiedDiscordIds = new Set(Object.values(verified).map(user => user.discordId));
-
-    console.log("✅ Holder IDs:", [...holderDiscordIds]);
-    console.log("✅ Verified IDs:", [...verifiedDiscordIds]);
-
-    const members = await guild.members.fetch();
-
-    for (const [userId, member] of members) {
-        try {
-            if (holderDiscordIds.has(userId) && !member.roles.cache.has(holderRole.id)) {
-                await member.roles.add(holderRole);
-                console.log(`✅ Assigned holder role to ${member.user.tag}`);
-            } else if (!holderDiscordIds.has(userId) && member.roles.cache.has(holderRole.id)) {
-                await member.roles.remove(holderRole);
-                console.log(`❌ Removed holder role from ${member.user.tag}`);
-            }
-
-            if (verifiedDiscordIds.has(userId) && !member.roles.cache.has(verifiedRole.id)) {
-                await member.roles.add(verifiedRole);
-                console.log(`✅ Assigned verified role to ${member.user.tag}`);
-            } else if (!verifiedDiscordIds.has(userId) && member.roles.cache.has(verifiedRole.id)) {
-                await member.roles.remove(verifiedRole);
-                console.log(`❌ Removed verified role from ${member.user.tag}`);
-            }
-        } catch (err) {
-            console.error(`❌ Failed to update roles for ${member.user.tag}:`, err);
-        }
-    }
+  }
 }
 
-// ✅ Run updateRoles() When the Bot is Ready
-client.once('ready', async () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
+// === WebSocket Integration for Verification Confirmation ===
+let ws;
 
-    await updateRoles();
+function connectWebSocket() {
+  ws = new WebSocket(WEBSOCKET_URL);
 
-    const interval = process.env.ROLE_CHECK_INTERVAL || 300000;
-    setInterval(updateRoles, interval);
-    console.log(`⏳ Role updates will run every ${interval / 60000} minutes.`);
-});
+  ws.on('open', () => {
+    console.log("🔗 Connected to WebSocket for verification updates.");
+  });
 
-// ✅ Listen for Slash Commands
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    console.log(`🔄 Command received: ${interaction.commandName}`);
-
-    if (interaction.commandName === 'verify') {
-        console.log("✅ /verify command triggered!");
-
-        const modal = new ModalBuilder()
-            .setCustomId('verificationModal')
-            .setTitle('Verification Form');
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('twitter')
-                    .setLabel('Twitter Handle (without @)')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                    .setCustomId('wallet')
-                    .setLabel('Solana Wallet Address')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true)
-            )
-        );
-
-        try {
-            await interaction.showModal(modal);
-            console.log("✅ Modal displayed successfully!");
-        } catch (error) {
-            console.error("❌ Error displaying modal:", error);
-        }
-    }
-});
-
-
-
-// ✅ Handle Modal Submission
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isModalSubmit()) return;
-
-    if (interaction.customId === 'verificationModal') {
-        console.log("✅ Modal submission received!");
-
-        const discordId = interaction.user.id;
-        const twitterHandle = interaction.fields.getTextInputValue('twitter');
-        const walletAddress = interaction.fields.getTextInputValue('wallet');
-
-        console.log(`📡 Sending verification request to ${API_BASE_URL}/payment-request`);
-
-        try {
-            // ✅ Defer reply immediately to avoid timeout issues
-            await interaction.deferReply({ ephemeral: true });
-
-            // Send data to the API
-            const response = await fetch(`${API_BASE_URL}/payment-request`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ discordId, twitterHandle, walletAddress })
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Server returned ${response.status}: ${errorText}`);
-            }
-
-            const data = await response.json();
-            console.log("✅ Received API response:", data);
-
-            // ✅ Update the deferred reply with the payment instructions
-            await interaction.editReply({
-                content: `✅ **Verification request received!**\n\n📌 **Amount:** ${data.amount} SOL\n📩 **Send to:** ${data.receivingAddress}`
-            });
-
-        } catch (error) {
-            console.error("❌ Verification error:", error);
-            await interaction.editReply({ content: '❌ Error during verification.' });
-        }
-    }
-});
-
-
-// ✅ Handle Payment Confirmations via WebSocket
-const ws = new WebSocket(WS_URL);
-
-ws.on('open', () => console.log("✅ Connected to WebSocket for payment confirmations."));
-
-ws.on('message', async (msg) => {
+  ws.on('message', async (data) => {
     try {
-        const data = JSON.parse(msg);
+      const message = JSON.parse(data);
+      if (message.status === "confirmed" && message.discordId) {
+        console.log(`✅ Verification confirmed for Discord ID: ${message.discordId}`);
 
-        if (data.status === "confirmed" && data.discordId) {
-            console.log(`✅ Payment confirmed for Discord ID: ${data.discordId}`);
+        const user = await client.users.fetch(message.discordId);
+        if (user) {
+          await user.send(`🎉 **You have been successfully verified!**\n` +
+            `✅ Your wallet \`${message.walletAddress}\` is now linked.\n` +
+            `🔗 **Transaction ID:** \`${message.txId}\`\n`);
 
-            // Fetch the user from Discord
-            const user = await client.users.fetch(data.discordId).catch(() => null);
-            if (!user) {
-                console.error(`❌ Could not find user with ID: ${data.discordId}`);
-                return;
-            }
-
-            // ✅ Send the confirmation as a private message (DM)
-            await user.send(`✅ **Payment Confirmed!**\nYour **${data.amount} SOL** has been successfully received! 🎉`).catch(() => {
-                console.error(`❌ Failed to send DM to ${user.tag}.`);
-            });
-
-            console.log(`📩 Sent confirmation DM to ${user.tag}`);
+          console.log(`📩 Confirmation message sent to ${user.tag}`);
         }
+      }
     } catch (error) {
-        console.error("❌ WebSocket Message Error:", error);
+      console.error("❌ Error handling WebSocket message:", error);
     }
+  });
+
+  ws.on('close', () => {
+    console.warn("⚠️ WebSocket connection closed. Reconnecting in 5 seconds...");
+    setTimeout(connectWebSocket, 5000);
+  });
+
+  ws.on('error', (error) => {
+    console.error("❌ WebSocket error:", error);
+  });
+}
+
+// === When the Bot is Ready ===
+client.once('ready', async () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+
+  // Initial role check
+  await updateRoles();
+
+  // Schedule role updates at intervals
+  const interval = process.env.ROLE_CHECK_INTERVAL || 300000; // default 5 minutes
+  setInterval(updateRoles, interval);
+  console.log(`⏳ Role updates will run every ${interval / 60000} minutes.`);
+
+  // Connect WebSocket for verification confirmations
+  connectWebSocket();
 });
 
-ws.on('close', () => console.log("❌ WebSocket connection closed."));
-ws.on('error', (error) => console.error("❌ WebSocket Error:", error));
+// === Load Interaction Handler ===
+const interactionCreateHandler = require('./events/interactionCreate.js');
+client.on('interactionCreate', (interaction) => interactionCreateHandler(interaction, client));
 
-// ✅ Log in to Discord
+// === Log in to Discord ===
 client.login(process.env.TOKEN);
