@@ -9,6 +9,9 @@ const {
   const API_BASE_URL = process.env.API_BASE_URL?.trim() || "http://localhost:3000";
   const VANITY_ADDRESS = process.env.VANITY_ADDRESS?.trim() || "NO_VANITY_ADDRESS_PROVIDED";
   
+  // Base58 regex pattern for Solana addresses (32-44 characters)
+  const BASE58_REGEX = /^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{32,44}$/;
+  
   // Export the main event handler and pass the `client`
   module.exports = async function (interaction, client) {
     if (interaction.isChatInputCommand()) {
@@ -53,6 +56,19 @@ const {
         let twitterHandle = interaction.fields.getTextInputValue('twitter').replace(/@/g, '');
         const walletAddress = interaction.fields.getTextInputValue('wallet');
   
+        console.log(`📡 Validating wallet address: ${walletAddress}`);
+  
+        // 🔍 Validate if the wallet address is a valid Solana address
+        if (!BASE58_REGEX.test(walletAddress)) {
+          console.error("❌ Invalid Solana address format!");
+          return await interaction.reply({
+            content: '❌ **Invalid wallet address!** Please enter a **valid Solana address** (Base58, 32-44 characters).',
+            ephemeral: true,
+          });
+        }
+  
+        console.log("✅ Wallet address is valid!");
+  
         console.log(`📡 Sending verification request for Discord ID: ${discordId}`);
   
         try {
@@ -74,7 +90,7 @@ const {
   
           await interaction.editReply({
             content: `✅ **Verification request received!**\n` +
-                     `📌 **Amount:** ${data.amount} SOL\n` +
+                     `📌 **Copy this amount:** ${data.amount} SOL\n` +
                      `📩 **Send to:** ${VANITY_ADDRESS}`
           });
   
