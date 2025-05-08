@@ -113,7 +113,7 @@ async function getNftMetadata(mintAddress) {
 // ----------------------
 async function generateHoldersList() {
   console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
-  
+
   const verifiedUsers = loadVerifiedUsers();
   const walletInfo = verifiedUsers
     .filter(user => user.verified)
@@ -127,18 +127,18 @@ async function generateHoldersList() {
 
   const holders = [];
 
+  const metadataMap = JSON.parse(fs.readFileSync(path.join(dataDir, 'metadata.json'), 'utf8'));
+
   for (const user of walletInfo) {
     console.log(`🔎 Checking wallet: ${user.walletAddress}`);
     const tokens = await getTokenAccounts(user.walletAddress);
     const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
 
     if (matchingTokens.length > 0) {
-      const tokenMetadataList = await Promise.all(
-        matchingTokens.map(async mint => {
-          const metadata = await getNftMetadata(mint);
-          return { mint, metadata };
-        })
-      );
+      const tokenMetadataList = matchingTokens.map(mint => ({
+        mint,
+        metadata: metadataMap[mint] || null
+      }));
 
       holders.push({
         walletAddress: user.walletAddress,
@@ -161,6 +161,7 @@ async function generateHoldersList() {
     console.error(`❌ Failed to write holders file: ${err.message}`);
   }
 }
+
 
 // ----------------------
 // Run Immediately & Set Interval
