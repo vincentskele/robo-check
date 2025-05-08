@@ -84,6 +84,29 @@ async function getTokenAccounts(wallet, retries = 3) {
     return [];
   }
 }
+// Get metadata (read-only)
+const { Metaplex, guestIdentity } = require('@metaplex-foundation/js');
+
+// Set up Metaplex with guest (read-only) access
+const metaplex = Metaplex.make(connection).use(guestIdentity());
+
+async function getNftMetadata(mintAddress) {
+  try {
+    const nft = await metaplex.nfts().findByMint({ mintAddress: new PublicKey(mintAddress) });
+    return {
+      name: nft.name,
+      symbol: nft.symbol,
+      image: nft.json?.image,
+      attributes: nft.json?.attributes,
+      uri: nft.uri,
+    };
+  } catch (err) {
+    console.error(`❌ Failed to get metadata for ${mintAddress}: ${err.message}`);
+    return null;
+  }
+}
+
+
 
 // ----------------------
 // Function: Generate Holders List
@@ -91,7 +114,6 @@ async function getTokenAccounts(wallet, retries = 3) {
 async function generateHoldersList() {
   console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
   
-  // Re-read verified users on each cycle
   const verifiedUsers = loadVerifiedUsers();
   const walletInfo = verifiedUsers
     .filter(user => user.verified)
@@ -108,18 +130,24 @@ async function generateHoldersList() {
   for (const user of walletInfo) {
     console.log(`🔎 Checking wallet: ${user.walletAddress}`);
     const tokens = await getTokenAccounts(user.walletAddress);
-    // Filter tokens matching the Solarians Mint List
     const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
 
     if (matchingTokens.length > 0) {
+      const tokenMetadataList = await Promise.all(
+        matchingTokens.map(async mint => {
+          const metadata = await getNftMetadata(mint);
+          return { mint, metadata };
+        })
+      );
+
       holders.push({
         walletAddress: user.walletAddress,
         discordId: user.discordId,
         twitterHandle: user.twitterHandle,
-        token: matchingTokens[0],    // First matching token
-        solarians: matchingTokens,   // All matching tokens
+        tokens: tokenMetadataList,
       });
-      console.log(`✅ ${user.walletAddress} holds ${matchingTokens.length} solarian token(s).`);
+
+      console.log(`✅ ${user.walletAddress} holds ${tokenMetadataList.length} solarian token(s).`);
     } else {
       console.log(`⚠️ ${user.walletAddress} holds no solarian tokens.`);
     }
