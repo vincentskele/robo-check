@@ -4,7 +4,8 @@ const {
     TextInputStyle,
     ActionRowBuilder,
   } = require('discord.js');
-  const fetch = require('node-fetch');
+  const fetch = (...args) => import('node-fetch').then(mod => mod.default(...args));
+
   
   const API_BASE_URL = process.env.API_BASE_URL?.trim() || "http://localhost:3000";
   const VANITY_ADDRESS = process.env.VANITY_ADDRESS?.trim() || "NO_VANITY_ADDRESS_PROVIDED";
