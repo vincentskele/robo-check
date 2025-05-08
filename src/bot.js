@@ -74,11 +74,11 @@ async function updateRoles() {
   const verifiedRole = await guild.roles.fetch(process.env.ROLE_ID);
 
   if (!holderRole || !verifiedRole) {
-    console.error("❌ One or more roles not found!");
+    console.error("❌ One or more base roles not found (HOLDER_ROLE_ID or ROLE_ID).");
     return;
   }
 
-  let holders = {}, verified = {};
+  let holders = [], verified = [];
   try {
     if (fs.existsSync(holdersFilePath)) {
       holders = JSON.parse(fs.readFileSync(holdersFilePath, 'utf8'));
@@ -91,16 +91,16 @@ async function updateRoles() {
     return;
   }
 
-  const holderDiscordIds = new Set(Object.values(holders).map(h => h.discordId));
-  const verifiedDiscordIds = new Set(Object.values(verified).map(v => v.discordId));
+  const holderDiscordIds = new Set(holders.map(h => h.discordId));
+  const verifiedDiscordIds = new Set(verified.map(v => v.discordId));
 
   console.log(`✅ Holders: ${holderDiscordIds.size}, Verified: ${verifiedDiscordIds.size}`);
 
-  // Fetch all guild members and update roles
   const members = await guild.members.fetch();
+
   for (const [userId, member] of members) {
     try {
-      // Update Holder Role
+      // --- Holder Role ---
       if (holderDiscordIds.has(userId) && !member.roles.cache.has(holderRole.id)) {
         await member.roles.add(holderRole);
         console.log(`✅ Assigned holder role to ${member.user.tag}`);
@@ -109,7 +109,7 @@ async function updateRoles() {
         console.log(`❌ Removed holder role from ${member.user.tag}`);
       }
 
-      // Update Verified Role
+      // --- Verified Role ---
       if (verifiedDiscordIds.has(userId) && !member.roles.cache.has(verifiedRole.id)) {
         await member.roles.add(verifiedRole);
         console.log(`✅ Assigned verified role to ${member.user.tag}`);
@@ -117,11 +117,54 @@ async function updateRoles() {
         await member.roles.remove(verifiedRole);
         console.log(`❌ Removed verified role from ${member.user.tag}`);
       }
+
+      // --- NFT Title Roles ---
+      const holderEntry = holders.find(h => h.discordId === userId);
+      if (holderEntry) {
+        const currentTitles = holderEntry.tokens
+          .map(token => token.metadata?.attributes?.find(attr => attr.trait_type === 'Title')?.value)
+          .filter(Boolean);
+
+        const allTitleEnvKeys = Object.keys(process.env).filter(k => k.startsWith('TITLE_ROLE_'));
+
+        for (const envKey of allTitleEnvKeys) {
+          const roleId = process.env[envKey];
+          if (!roleId) continue;
+
+          const expectedTitle = envKey
+            .replace('TITLE_ROLE_', '')
+            .replace(/_/g, ' ')
+            .toLowerCase();
+
+          const hasTitle = currentTitles.some(t => t.toLowerCase() === expectedTitle);
+
+          let role;
+          try {
+            role = await guild.roles.fetch(roleId);
+          } catch (e) {
+            console.warn(`⚠️ Failed to fetch role for ${envKey}:`, e.message);
+            continue;
+          }
+
+          if (!role) continue;
+
+          const hasRole = member.roles.cache.has(role.id);
+
+          if (hasTitle && !hasRole) {
+            await member.roles.add(role);
+            console.log(`🎖️ Assigned "${role.name}" role to ${member.user.tag}`);
+          } else if (!hasTitle && hasRole) {
+            await member.roles.remove(role);
+            console.log(`🗑️ Removed stale role "${role.name}" from ${member.user.tag}`);
+          }
+        }
+      }
     } catch (err) {
-      console.error(`❌ Failed to update roles for ${member.user.tag}:`, err);
+      console.error(`❌ Failed to update roles for ${member.user?.tag || userId}:`, err);
     }
   }
 }
+
 
 // === WebSocket Integration for Verification Confirmation ===
 let ws;
