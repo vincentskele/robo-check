@@ -1,71 +1,113 @@
+/**
+ * generateHolders.js
+ * -----------------------------------------------------------
+ * Creates src/data/holders.json – now enriched with „feesPaid“
+ *
+ *  • Reads the verified wallet list (verified.json)
+ *  • Checks which wallets hold Solarian mints
+ *  • Adds metadata from metadata.json
+ *  • NEW: calls Helius once per mint to see if the most‑recent
+ *         transfer is an NFT sale (=> royalties/fees paid)
+ *
+ * Runs immediately and then every GENERATE_HOLDERS_INTERVAL ms
+ * (default 900 000 = 15 min).
+ */
+
 require('dotenv').config();
-const fs = require('fs');
-const path = require('path');
-const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
+const FEE_RPC = process.env.FEE_RPC || 'https://api.helius.xyz';
 
-// ----------------------
-// Define Paths using process.cwd() so we work from your project root
-// ----------------------
-const dataDir = path.join(process.cwd(), 'src/data');
-const holdersFile = path.join(dataDir, 'holders.json');
-const verifiedFile = path.join(dataDir, 'verified.json');
-const solariansFile = path.join(dataDir, 'solarians-mintlist.json');
+const fs         = require('fs');
+const path       = require('path');
+const fetch      = require('node-fetch');
+const {
+  Connection,
+  clusterApiUrl,
+  PublicKey
+} = require('@solana/web3.js');
+const {
+  Metaplex,
+  guestIdentity
+} = require('@metaplex-foundation/js');
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+/*──────────────────────────────────────────────────────────────
+  CONFIG & PATHS
+  ─────────────────────────────────────────────────────────────*/
+const dataDir        = path.join(process.cwd(), 'src/data');
+const holdersFile    = path.join(dataDir, 'holders.json');
+const verifiedFile   = path.join(dataDir, 'verified.json');
+const solariansFile  = path.join(dataDir, 'solarians-mintlist.json');
+const metadataFile   = path.join(dataDir, 'metadata.json');
+
+/* Ensure data dir exists */
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+/*──────────────────────────────────────────────────────────────
+  HELIUS API KEY  (hard‑code or keep in .env as HELIUS_KEY)
+  ─────────────────────────────────────────────────────────────*/
+const HELIUS_KEY = process.env.HELIUS_KEY || 'YOUR-HELIUS-KEY-GOES-HERE';
+if (!HELIUS_KEY) {
+  console.error('❌  Missing Helius API key (set HELIUS_KEY or hard‑code).');
+  process.exit(1);
 }
 
-// ----------------------
-// Function: Load Solarians Mint List
-// ----------------------
+/*──────────────────────────────────────────────────────────────
+  LOAD STATIC DATA
+  ─────────────────────────────────────────────────────────────*/
 function loadSolariansMintList() {
   if (!fs.existsSync(solariansFile)) {
-    console.error(`❌ Missing file: ${solariansFile}`);
+    console.error(`❌ Missing ${solariansFile}`);
     process.exit(1);
   }
-  const solariansData = require(solariansFile);
-  const solariansMintList = solariansData.solariansMintList || [];
-  if (solariansMintList.length === 0) {
-    console.error('❌ solariansMintList is empty!');
-    process.exit(1);
-  }
-  return solariansMintList;
+  const raw = require(solariansFile);
+  /* accept either bare array or wrapped array */
+  return Array.isArray(raw) ? raw : Object.values(raw).find(Array.isArray) || [];
 }
 
 const solariansMintList = loadSolariansMintList();
-console.log(`✅ Loaded ${solariansMintList.length} solarian mint(s)`);
+console.log(`✅ Loaded ${solariansMintList.length} Solarian mints`);
 
-// ----------------------
-// Setup Solana Connection
-// ----------------------
-const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta');
+const metadataMap = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+
+/*──────────────────────────────────────────────────────────────
+  SOLANA RPC & METAPLEX
+  ─────────────────────────────────────────────────────────────*/
+const rpcUrl     = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta');
 const connection = new Connection(rpcUrl, 'processed');
+const metaplex   = Metaplex.make(connection).use(guestIdentity());
 
-// ----------------------
-// Function: Load Verified Users Each Cycle
-// ----------------------
-function loadVerifiedUsers() {
-  if (!fs.existsSync(verifiedFile)) {
-    console.error(`❌ Missing file: ${verifiedFile}`);
-    process.exit(1);
-  }
+/*──────────────────────────────────────────────────────────────
+  HELIUS helper: was the most‑recent tx an NFT sale?
+  ─────────────────────────────────────────────────────────────*/
+  const heliusURL = (mint) =>
+    `${FEE_RPC}/v0/addresses/${mint}/transactions?api-key=${HELIUS_KEY}&limit=1`;
+  
+async function feesPaidForMint(mint) {
   try {
-    const verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
-    console.log(`✅ Loaded ${verifiedUsers.length} verified user(s) from ${verifiedFile}`);
-    return verifiedUsers;
-  } catch (err) {
-    console.error(`❌ Failed to parse verified file: ${err.message}`);
-    process.exit(1);
+    const [tx] = await fetch(heliusURL(mint)).then((r) => r.json());
+    if (!tx) return false;
+    if (tx.type?.startsWith('NFT_') && tx.type !== 'NFT_LISTING') return true;
+    if (tx.events?.nft?.type?.includes('NFT_SALE'))               return true;
+    return false;
+  } catch (e) {
+    console.error(`⚠️  Helius error for ${mint}: ${e.message}`);
+    return false;
   }
 }
 
-// ----------------------
-// Function: Get Token Accounts for a Wallet
-// ----------------------
+/*──────────────────────────────────────────────────────────────
+  WALLET HELPERS
+  ─────────────────────────────────────────────────────────────*/
+function loadVerifiedUsers() {
+  if (!fs.existsSync(verifiedFile)) {
+    console.error(`❌ Missing ${verifiedFile}`);
+    process.exit(1);
+  }
+  return JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
+}
+
 async function getTokenAccounts(wallet, retries = 3) {
   try {
-    const pubkey = new PublicKey(wallet);
-    // Request a 0-lamport airdrop to force fresh data (ignoring any errors)
+    const pubkey        = new PublicKey(wallet);
     await connection.requestAirdrop(pubkey, 0).catch(() => {});
     const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
       pubkey,
@@ -73,103 +115,68 @@ async function getTokenAccounts(wallet, retries = 3) {
       'processed'
     );
     return tokenAccounts.value
-      .filter(acc => acc.account.data.parsed.info.tokenAmount.uiAmount > 0)
-      .map(acc => acc.account.data.parsed.info.mint);
+      .filter(({ account }) => account.data.parsed.info.tokenAmount.uiAmount > 0)
+      .map(({ account }) => account.data.parsed.info.mint);
   } catch (err) {
-    console.error(`❌ Error fetching tokens for wallet ${wallet}: ${err.message}`);
     if (retries > 0) {
-      console.log(`🔄 Retrying (${retries} attempt(s) left)...`);
+      console.log(`🔄 RPC retry (${retries}) for ${wallet}`);
       return getTokenAccounts(wallet, retries - 1);
     }
+    console.error(`❌ Token fetch failed for ${wallet}: ${err.message}`);
     return [];
   }
 }
-// Get metadata (read-only)
-const { Metaplex, guestIdentity } = require('@metaplex-foundation/js');
 
-// Set up Metaplex with guest (read-only) access
-const metaplex = Metaplex.make(connection).use(guestIdentity());
-
-async function getNftMetadata(mintAddress) {
-  try {
-    const nft = await metaplex.nfts().findByMint({ mintAddress: new PublicKey(mintAddress) });
-    return {
-      name: nft.name,
-      symbol: nft.symbol,
-      image: nft.json?.image,
-      attributes: nft.json?.attributes,
-      uri: nft.uri,
-    };
-  } catch (err) {
-    console.error(`❌ Failed to get metadata for ${mintAddress}: ${err.message}`);
-    return null;
-  }
-}
-
-
-
-// ----------------------
-// Function: Generate Holders List
-// ----------------------
+/*──────────────────────────────────────────────────────────────
+  MAIN: generateHoldersList
+  ─────────────────────────────────────────────────────────────*/
 async function generateHoldersList() {
-  console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
+  console.log(`🔄 generateHoldersList @ ${new Date().toLocaleString()}`);
 
-  const verifiedUsers = loadVerifiedUsers();
-  const walletInfo = verifiedUsers
-    .filter(user => user.verified)
-    .map(user => ({
-      walletAddress: user.walletAddress,
-      discordId: user.discordId,
-      twitterHandle: user.twitterHandle || null,
-    }));
+  const verifiedUsers = loadVerifiedUsers().filter(u => u.verified);
+  const holders       = [];
 
-  console.log("✅ Found Wallets:", walletInfo.map(u => u.walletAddress));
+  for (const user of verifiedUsers) {
+    const { walletAddress } = user;
+    console.log(`🔎 Wallet ${walletAddress}`);
+    const tokens          = await getTokenAccounts(walletAddress);
+    const solarianMints   = tokens.filter(m => solariansMintList.includes(m));
 
-  const holders = [];
-
-  const metadataMap = JSON.parse(fs.readFileSync(path.join(dataDir, 'metadata.json'), 'utf8'));
-
-  for (const user of walletInfo) {
-    console.log(`🔎 Checking wallet: ${user.walletAddress}`);
-    const tokens = await getTokenAccounts(user.walletAddress);
-    const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
-
-    if (matchingTokens.length > 0) {
-      const tokenMetadataList = matchingTokens.map(mint => ({
-        mint,
-        metadata: metadataMap[mint] || null
-      }));
-
-      holders.push({
-        walletAddress: user.walletAddress,
-        discordId: user.discordId,
-        twitterHandle: user.twitterHandle,
-        tokens: tokenMetadataList,
-      });
-
-      console.log(`✅ ${user.walletAddress} holds ${tokenMetadataList.length} solarian token(s).`);
-    } else {
-      console.log(`⚠️ ${user.walletAddress} holds no solarian tokens.`);
+    if (solarianMints.length === 0) {
+      console.log(`⚠️  No Solarian tokens`);
+      continue;
     }
+
+    /* Build token list with metadata + feesPaid */
+    const tokenMetadataList = [];
+    for (const mint of solarianMints) {
+      const feesPaid = await feesPaidForMint(mint);
+      tokenMetadataList.push({
+        mint,
+        metadata : metadataMap[mint] || null,
+        feesPaid
+      });
+    }
+
+    holders.push({
+      walletAddress,
+      discordId    : user.discordId,
+      twitterHandle: user.twitterHandle || null,
+      tokens       : tokenMetadataList
+    });
+
+    console.log(`✅  ${solarianMints.length} tokens (fees checked)`);
   }
 
-  try {
-    fs.writeFileSync(holdersFile, JSON.stringify(holders, null, 2));
-    console.log(`🎉 Holders list updated at ${new Date().toLocaleString()}`);
-    console.log(`📝 File written to: ${holdersFile}`);
-  } catch (err) {
-    console.error(`❌ Failed to write holders file: ${err.message}`);
-  }
+  fs.writeFileSync(holdersFile, JSON.stringify(holders, null, 2));
+  console.log(`🎉 Holders list written → ${holdersFile}`);
 }
 
-
-// ----------------------
-// Run Immediately & Set Interval
-// ----------------------
-const intervalMs = process.env.GENERATE_HOLDERS_INTERVAL
-  ? parseInt(process.env.GENERATE_HOLDERS_INTERVAL)
-  : 900000; // Default: 15 minutes
+/*──────────────────────────────────────────────────────────────
+  SCHEDULER
+  ─────────────────────────────────────────────────────────────*/
+const intervalMs = parseInt(process.env.GENERATE_HOLDERS_INTERVAL || '900000', 10);
 
 generateHoldersList();
 setInterval(generateHoldersList, intervalMs);
-console.log(`⏳ generateHolders.js will run every ${intervalMs / 60000} minute(s).`);
+console.log(`⏳ generateHoldersList runs every ${intervalMs / 60000} min`);
