@@ -15,6 +15,13 @@ const VANITY_ADDRESS = process.env.VANITY_ADDRESS || RECEIVING_ADDRESS;
 // ✅ Middleware
 app.use(express.json());
 app.use(cors()); // Enable CORS if frontend requests are from a different origin
+app.use((req, res, next) => {
+    res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'self'; img-src 'self' data: https://arweave.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'"
+    );
+    next();
+});
 
 // ✅ Serve Static Files
 const publicPath = path.resolve(__dirname, 'public');
