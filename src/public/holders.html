@@ -28,7 +28,11 @@
           <h1>Verified Holders</h1>
           <p class="muted" id="holderCount">Loading holders…</p>
         </div>
-        <div class="search-wrap">
+        <div class="controls-wrap">
+          <select id="holderSort" aria-label="Sort holders">
+            <option value="alpha" selected>Sort: A → Z</option>
+            <option value="count">Sort: Biggest Holders</option>
+          </select>
           <input id="holderSearch" type="search" placeholder="Search by handle, Discord ID, or wallet" />
         </div>
       </div>

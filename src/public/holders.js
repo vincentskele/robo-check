@@ -1,12 +1,14 @@
 const holderListEl = document.getElementById('holderList');
 const holderCountEl = document.getElementById('holderCount');
 const holderSearchEl = document.getElementById('holderSearch');
+const holderSortEl = document.getElementById('holderSort');
 const detailTitleEl = document.getElementById('detailTitle');
 const detailSubtitleEl = document.getElementById('detailSubtitle');
 const detailBodyEl = document.getElementById('detailBody');
 
 let allHolders = [];
 let activeIndex = null;
+let sortMode = 'alpha';
 const titleOrder = [
   'commander',
   'spy',
@@ -34,6 +36,18 @@ const holderLabel = (holder) => {
     return `Discord ${holder.discordId}`;
   }
   return holder.walletAddress;
+};
+
+const getSortedHolders = (holders) => {
+  const copy = [...holders];
+  if (sortMode === 'count') {
+    return copy.sort((a, b) => (b.tokens?.length || 0) - (a.tokens?.length || 0));
+  }
+  return copy.sort((a, b) => {
+    const aLabel = holderLabel(a).toLowerCase();
+    const bLabel = holderLabel(b).toLowerCase();
+    return aLabel.localeCompare(bLabel);
+  });
 };
 
 const createDiscordLink = (discordId) => {
@@ -242,7 +256,7 @@ const applySearch = () => {
     return searchSpace.includes(query);
   });
   activeIndex = null;
-  renderHolderList(filtered);
+  renderHolderList(getSortedHolders(filtered));
 
   if (!filtered.length) {
     detailTitleEl.textContent = 'No matches';
@@ -260,7 +274,7 @@ const loadHolders = async () => {
     const data = await response.json();
     allHolders = Array.isArray(data) ? data : [];
     holderCountEl.textContent = `${allHolders.length} verified holder${allHolders.length === 1 ? '' : 's'}`;
-    renderHolderList(allHolders);
+    renderHolderList(getSortedHolders(allHolders));
   } catch (error) {
     holderCountEl.textContent = 'Unable to load holders.';
     holderListEl.innerHTML = '<div class="empty-state"><p>Could not fetch holders data.</p></div>';
@@ -269,5 +283,9 @@ const loadHolders = async () => {
 };
 
 holderSearchEl.addEventListener('input', applySearch);
+holderSortEl.addEventListener('change', () => {
+  sortMode = holderSortEl.value;
+  applySearch();
+});
 
 loadHolders();

@@ -133,7 +133,26 @@ a:hover {
   font-size: 0.7rem;
 }
 
-.search-wrap input {
+.controls-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.controls-wrap select {
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  font-family: 'Press Start 2P', sans-serif;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  background-color: var(--bg-dark);
+  box-shadow: 1px 1px 0 var(--black);
+}
+
+.controls-wrap input {
   padding: 8px 10px;
   border-radius: 4px;
   border: 2px solid var(--accent);
@@ -326,7 +345,7 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
-  .search-wrap input {
+  .controls-wrap input {
     min-width: 100%;
   }
 }
