@@ -25,6 +25,11 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(publicPath, 'index.html'));
 });
 
+// ✅ Serve holders dashboard
+app.get('/holders', (req, res) => {
+    res.sendFile(path.join(publicPath, 'holders.html'));
+});
+
 // ✅ API Endpoint to Get the Public Address
 app.get('/api/address', (req, res) => {
     res.json({ address: VANITY_ADDRESS });
@@ -34,6 +39,7 @@ app.get('/api/address', (req, res) => {
 // ✅ Path to `tokens.json` (inside `src/data/`)
 const dataDir = path.join(__dirname, 'data');
 const tokensFile = path.join(dataDir, 'tokens.json');
+const holdersFile = path.join(dataDir, 'holders.json');
 
 // ✅ Ensure the `data/` Directory Exists
 if (!fs.existsSync(dataDir)) {
@@ -141,6 +147,21 @@ app.post('/payment-request', (req, res) => {
         amount,
         receivingAddress: RECEIVING_ADDRESS
     });
+});
+
+// ✅ API endpoint to return holders data
+app.get('/api/holders', (req, res) => {
+    try {
+        if (!fs.existsSync(holdersFile)) {
+            return res.json([]);
+        }
+        const raw = fs.readFileSync(holdersFile, 'utf8');
+        const holders = raw ? JSON.parse(raw) : [];
+        return res.json(holders);
+    } catch (error) {
+        console.error("❌ Error reading holders.json:", error);
+        return res.status(500).json({ error: "Failed to read holders data" });
+    }
 });
 
 

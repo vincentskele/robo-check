@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robo-Check Holders</title>
+  <link rel="stylesheet" href="holders.css">
+  <link rel="icon" type="image/png" href="/favicon.png">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-mark" src="/logo.gif" alt="Robo-Check logo">
+      <div>
+        <p class="brand-title">Robo-Check</p>
+        <p class="brand-sub">Verified Solarian Holders</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <a class="ghost-link" href="/">Verification</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel holders-panel" aria-label="Verified holders list">
+      <div class="panel-header">
+        <div>
+          <h1>Verified Holders</h1>
+          <p class="muted" id="holderCount">Loading holders…</p>
+        </div>
+        <div class="search-wrap">
+          <input id="holderSearch" type="search" placeholder="Search by handle, Discord ID, or wallet" />
+        </div>
+      </div>
+      <div class="holder-list" id="holderList"></div>
+    </section>
+
+    <section class="panel details-panel" aria-label="Selected holder details">
+      <div class="panel-header">
+        <div>
+          <h2 id="detailTitle">Select a holder</h2>
+          <p class="muted" id="detailSubtitle">Choose a name to view their Solarians and metadata.</p>
+        </div>
+      </div>
+
+      <div id="detailBody" class="detail-body">
+        <div class="empty-state">
+          <p>No holder selected yet.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© 2026 Robo-Check Verify | Powered by RoboDAO.</p>
+    <p><a href="https://volt.solarians.world">Volt Dashboard</a></p>
+  </footer>
+
+  <script src="holders.js"></script>
+</body>
+</html>
