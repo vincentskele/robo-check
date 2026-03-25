@@ -20,6 +20,17 @@ const titleOrder = [
   'administrator',
   'drone',
 ];
+const votingPowerIndex = {
+  commander: 0.13,
+  spy: 0.032,
+  pilot: 0.018,
+  monitor: 0.014,
+  prospector: 0.013,
+  guard: 0.01,
+  'squad leader': 0.0086,
+  administrator: 0.0061,
+  drone: 0.0039,
+};
 
 const safeText = (value, fallback = 'Unknown') => {
   if (value === null || value === undefined || value === '') {
@@ -38,10 +49,23 @@ const holderLabel = (holder) => {
   return holder.walletAddress;
 };
 
+const computeVotingPower = (tokens = []) => {
+  return tokens.reduce((sum, token) => {
+    const attrs = Array.isArray(token?.metadata?.attributes) ? token.metadata.attributes : [];
+    const titleAttr = attrs.find((attr) => safeText(attr.trait_type, '').toLowerCase() === 'title');
+    const titleValue = safeText(titleAttr?.value, '').toLowerCase().trim();
+    const power = votingPowerIndex[titleValue] || 0;
+    return sum + power;
+  }, 0);
+};
+
 const getSortedHolders = (holders) => {
   const copy = [...holders];
   if (sortMode === 'count') {
     return copy.sort((a, b) => (b.tokens?.length || 0) - (a.tokens?.length || 0));
+  }
+  if (sortMode === 'power') {
+    return copy.sort((a, b) => computeVotingPower(b.tokens) - computeVotingPower(a.tokens));
   }
   return copy.sort((a, b) => {
     const aLabel = holderLabel(a).toLowerCase();
@@ -90,7 +114,8 @@ const renderHolderList = (holders) => {
     const metaEl = document.createElement('div');
     metaEl.className = 'holder-meta';
     const tokenCount = holder.tokens ? holder.tokens.length : 0;
-    metaEl.textContent = `${tokenCount} Solarian${tokenCount === 1 ? '' : 's'}`;
+    const powerTotal = computeVotingPower(holder.tokens || []);
+    metaEl.textContent = `${tokenCount} Solarian${tokenCount === 1 ? '' : 's'} · Voting Power ${powerTotal.toFixed(4)}`;
 
     card.appendChild(nameEl);
     card.appendChild(metaEl);
@@ -148,6 +173,11 @@ const renderHolderDetails = (holder) => {
   }
 
   header.appendChild(idsEl);
+  const powerLine = document.createElement('div');
+  powerLine.className = 'muted';
+  const powerTotal = computeVotingPower(holder.tokens || []);
+  powerLine.textContent = `Total Voting Power: ${powerTotal.toFixed(4)}`;
+  header.appendChild(powerLine);
   detailBodyEl.appendChild(header);
 
   const tokensGrid = document.createElement('div');
@@ -182,7 +212,8 @@ const renderHolderDetails = (holder) => {
   orderedTitles.forEach((titleKey) => {
     const pill = document.createElement('div');
     pill.className = 'title-count-pill';
-    pill.textContent = `${titleKey} (${grouped[titleKey].length})`;
+    const sectionPower = (grouped[titleKey] || []).length * (votingPowerIndex[titleKey] || 0);
+    pill.textContent = `${titleKey} (${grouped[titleKey].length}) · ${sectionPower.toFixed(4)}`;
     summaryBar.appendChild(pill);
   });
   detailBodyEl.appendChild(summaryBar);
@@ -194,7 +225,8 @@ const renderHolderDetails = (holder) => {
 
     const summary = document.createElement('summary');
     summary.className = 'title-summary';
-    summary.textContent = `${titleKey} (${grouped[titleKey].length})`;
+    const sectionPower = (grouped[titleKey] || []).length * (votingPowerIndex[titleKey] || 0);
+    summary.textContent = `${titleKey} (${grouped[titleKey].length}) · Voting Power ${sectionPower.toFixed(4)}`;
     section.appendChild(summary);
 
     const sectionGrid = document.createElement('div');
