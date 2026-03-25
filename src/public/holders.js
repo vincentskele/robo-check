@@ -5,6 +5,7 @@ const holderSortEl = document.getElementById('holderSort');
 const detailTitleEl = document.getElementById('detailTitle');
 const detailSubtitleEl = document.getElementById('detailSubtitle');
 const detailBodyEl = document.getElementById('detailBody');
+const detailsPanelEl = document.querySelector('.details-panel');
 
 let allHolders = [];
 let activeIndex = null;
@@ -124,6 +125,10 @@ const renderHolderList = (holders) => {
       activeIndex = index;
       renderHolderList(holders);
       renderHolderDetails(holder);
+
+      if (detailsPanelEl && window.matchMedia('(max-width: 960px)').matches) {
+        detailsPanelEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
 
     holderListEl.appendChild(card);
