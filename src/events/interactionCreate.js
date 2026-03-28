@@ -27,7 +27,7 @@ const {
           new ActionRowBuilder().addComponents(
             new TextInputBuilder()
               .setCustomId('twitter')
-              .setLabel('Twitter @username')
+              .setLabel('X username')
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
           ),

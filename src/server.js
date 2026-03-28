@@ -16,6 +16,7 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
 const DISCORD_OAUTH_AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize";
 const DISCORD_OAUTH_TOKEN_URL = "https://discord.com/api/oauth2/token";
+const DISCORD_BOT_TOKEN = process.env.TOKEN;
 
 function getServerOrigin() {
     const raw = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -134,6 +135,27 @@ app.get('/auth/discord/callback', async (req, res) => {
 app.get('/api/address', (req, res) => {
     res.json({ address: VANITY_ADDRESS });
     console.log(`📡 Served address: ${VANITY_ADDRESS}`);
+});
+
+// ✅ Resolve Discord username by ID
+app.get('/api/discord-username/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!DISCORD_BOT_TOKEN) {
+        return res.status(500).json({ error: 'Discord bot token not configured.' });
+    }
+    try {
+        const userResponse = await fetch(`https://discord.com/api/v10/users/${id}`, {
+            headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` }
+        });
+        if (!userResponse.ok) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+        const user = await userResponse.json();
+        return res.json({ username: user.username });
+    } catch (error) {
+        console.error('❌ Error resolving Discord username:', error);
+        return res.status(500).json({ error: 'Failed to resolve username.' });
+    }
 });
 
 // ✅ Path to `tokens.json` (inside `src/data/`)

@@ -52,7 +52,8 @@ document.addEventListener("DOMContentLoaded", function () {
         submitButton.disabled = true; // Prevent multiple submissions
 
         const discordId = document.getElementById('discordId').value.trim();
-        const twitterHandle = document.getElementById('twitterHandle').value.trim();
+        let twitterHandle = document.getElementById('twitterHandle').value.trim();
+        twitterHandle = twitterHandle.replace(/^@+/, '');
         const walletAddress = document.getElementById('walletAddress').value.trim();
         const resultBox = document.getElementById('verificationResult');
 
@@ -70,7 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         if (!twitterPattern.test(twitterHandle)) {
-            resultBox.innerHTML = `<p>❌ Invalid Twitter Username. Only letters, numbers, and underscores allowed (max 15 chars).</p>`;
+            resultBox.innerHTML = `<p>❌ Invalid X Username. Only letters, numbers, and underscores allowed (max 15 chars).</p>`;
             submitButton.disabled = false;
             return;
         }

@@ -10,6 +10,7 @@ const detailsPanelEl = document.querySelector('.details-panel');
 let allHolders = [];
 let activeIndex = null;
 let sortMode = 'alpha';
+const discordNameMap = {};
 const titleOrder = [
   'commander',
   'spy',
@@ -45,7 +46,8 @@ const holderLabel = (holder) => {
     return `@${holder.twitterHandle}`;
   }
   if (holder.discordId) {
-    return `Discord ${holder.discordId}`;
+    const name = discordNameMap[holder.discordId];
+    return name ? `Discord ${name}` : `Discord ${holder.discordId}`;
   }
   return holder.walletAddress;
 };
@@ -80,16 +82,40 @@ const createDiscordLink = (discordId) => {
   link.href = `https://discord.com/users/${discordId}`;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  link.textContent = `Discord ${discordId}`;
+  const name = discordNameMap[discordId];
+  link.textContent = name ? `Discord ${name}` : `Discord ${discordId}`;
   return link;
+};
+
+const resolveDiscordUsername = async (discordId) => {
+  if (!discordId || discordNameMap[discordId]) return;
+  try {
+    const response = await fetch(`/api/discord-username/${discordId}`);
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data?.username) {
+      discordNameMap[discordId] = data.username;
+    }
+  } catch (error) {
+    console.error('Error resolving Discord username:', error);
+  }
+};
+
+const resolveDiscordNames = async (holders) => {
+  const ids = [...new Set(holders.map((h) => h.discordId).filter(Boolean))];
+  await Promise.all(ids.map((id) => resolveDiscordUsername(id)));
+  renderHolderList(getSortedHolders(allHolders));
+  if (activeIndex !== null && allHolders[activeIndex]) {
+    renderHolderDetails(allHolders[activeIndex]);
+  }
 };
 
 const createTwitterLink = (handle) => {
   const link = document.createElement('a');
-  link.href = `https://twitter.com/${handle}`;
+  link.href = `https://x.com/${handle}`;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  link.textContent = `@${handle}`;
+  link.textContent = `X @${handle}`;
   return link;
 };
 
@@ -312,6 +338,7 @@ const loadHolders = async () => {
     allHolders = Array.isArray(data) ? data : [];
     holderCountEl.textContent = `${allHolders.length} verified holder${allHolders.length === 1 ? '' : 's'}`;
     renderHolderList(getSortedHolders(allHolders));
+    resolveDiscordNames(allHolders);
   } catch (error) {
     holderCountEl.textContent = 'Unable to load holders.';
     holderListEl.innerHTML = '<div class="empty-state"><p>Could not fetch holders data.</p></div>';

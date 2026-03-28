@@ -19,10 +19,10 @@ const {
         .setCustomId('verificationModal')
         .setTitle('Verification Form');
   
-      // Twitter @username field
+      // X username field
       const twitterInput = new TextInputBuilder()
         .setCustomId('twitter')
-        .setLabel('Twitter @username')
+        .setLabel('X username')
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
   
