@@ -24,6 +24,27 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
     }
 
+    const discordLinkButton = document.getElementById('discordLinkButton');
+    if (discordLinkButton) {
+        discordLinkButton.addEventListener('click', () => {
+            window.location.href = '/auth/discord';
+        });
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const linkedDiscordId = urlParams.get('discordId');
+    if (linkedDiscordId) {
+        const discordInput = document.getElementById('discordId');
+        if (discordInput) {
+            discordInput.value = linkedDiscordId;
+        }
+        const resultBox = document.getElementById('verificationResult');
+        if (resultBox) {
+            resultBox.innerHTML = `<p>✅ Discord ID linked.</p>`;
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     verificationForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         

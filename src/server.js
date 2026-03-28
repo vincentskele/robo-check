@@ -12,6 +12,28 @@ const PORT = process.env.PORT || 3000;
 const RECEIVING_ADDRESS = process.env.RECEIVING_ADDRESS || "YourSolanaAddressHere";
 const VANITY_ADDRESS = process.env.VANITY_ADDRESS || RECEIVING_ADDRESS;
 
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
+const DISCORD_OAUTH_AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize";
+const DISCORD_OAUTH_TOKEN_URL = "https://discord.com/api/oauth2/token";
+
+function getServerOrigin() {
+    const raw = process.env.BASE_URL || `http://localhost:${PORT}`;
+    try {
+        const url = new URL(raw.includes("://") ? raw : `http://${raw}`);
+        if (!url.port && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
+            url.port = String(PORT);
+        }
+        return url.origin;
+    } catch (error) {
+        return `http://localhost:${PORT}`;
+    }
+}
+
+function getDiscordRedirectUri() {
+    return `${getServerOrigin()}/auth/discord/callback`;
+}
+
 // ✅ Middleware
 app.use(express.json());
 app.use(cors()); // Enable CORS if frontend requests are from a different origin
@@ -35,6 +57,77 @@ app.get('/', (req, res) => {
 // ✅ Serve holders dashboard
 app.get('/holders', (req, res) => {
     res.sendFile(path.join(publicPath, 'holders.html'));
+});
+
+app.get('/auth/discord', (req, res) => {
+    if (!DISCORD_CLIENT_ID) {
+        return res.status(500).send("Discord client ID is not configured.");
+    }
+
+    const redirectUri = getDiscordRedirectUri();
+    const params = new URLSearchParams({
+        client_id: DISCORD_CLIENT_ID,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "identify",
+        prompt: "consent"
+    });
+
+    return res.redirect(`${DISCORD_OAUTH_AUTHORIZE_URL}?${params.toString()}`);
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+    const { code } = req.query;
+
+    if (!code) {
+        return res.status(400).send("Missing Discord authorization code.");
+    }
+
+    if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET) {
+        return res.status(500).send("Discord OAuth credentials are not configured.");
+    }
+
+    try {
+        const redirectUri = getDiscordRedirectUri();
+        const tokenResponse = await fetch(DISCORD_OAUTH_TOKEN_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+                client_id: DISCORD_CLIENT_ID,
+                client_secret: DISCORD_CLIENT_SECRET,
+                grant_type: "authorization_code",
+                code: String(code),
+                redirect_uri: redirectUri
+            })
+        });
+
+        if (!tokenResponse.ok) {
+            const errorBody = await tokenResponse.text();
+            console.error("❌ Discord token exchange failed:", errorBody);
+            return res.status(500).send("Discord token exchange failed.");
+        }
+
+        const tokenData = await tokenResponse.json();
+        const userResponse = await fetch("https://discord.com/api/users/@me", {
+            headers: { Authorization: `Bearer ${tokenData.access_token}` }
+        });
+
+        if (!userResponse.ok) {
+            const errorBody = await userResponse.text();
+            console.error("❌ Failed to fetch Discord user:", errorBody);
+            return res.status(500).send("Failed to fetch Discord user.");
+        }
+
+        const discordUser = await userResponse.json();
+        const discordId = discordUser.id;
+
+        const redirect = new URL("/", getServerOrigin());
+        redirect.searchParams.set("discordId", discordId);
+        return res.redirect(redirect.toString());
+    } catch (error) {
+        console.error("❌ Discord OAuth error:", error);
+        return res.status(500).send("Discord login failed.");
+    }
 });
 
 // ✅ API Endpoint to Get the Public Address
