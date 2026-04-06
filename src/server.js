@@ -206,6 +206,23 @@ const writeTokens = (tokens) => {
     }
 };
 
+const normalizeDiscordId = (discordId) => String(discordId || '').trim();
+const normalizeWalletAddress = (walletAddress) => String(walletAddress || '').trim().toLowerCase();
+
+const readHolders = () => {
+    try {
+        if (!fs.existsSync(holdersFile)) {
+            return [];
+        }
+        const raw = fs.readFileSync(holdersFile, 'utf8');
+        const holders = raw ? JSON.parse(raw) : [];
+        return Array.isArray(holders) ? holders : [];
+    } catch (error) {
+        console.error("❌ Error reading holders.json:", error);
+        return [];
+    }
+};
+
 // ✅ Function to Remove Expired Requests
 const cleanupExpiredRequests = () => {
     let tokens = readTokens();
@@ -235,6 +252,21 @@ app.post('/payment-request', (req, res) => {
 
     // ✅ Cleanup expired requests before adding a new one
     cleanupExpiredRequests();
+
+    const normalizedDiscordId = normalizeDiscordId(discordId);
+    const normalizedWalletAddress = normalizeWalletAddress(walletAddress);
+    const existingHolder = readHolders().find((holder) => (
+        normalizeWalletAddress(holder?.walletAddress) === normalizedWalletAddress
+    ));
+
+    if (existingHolder && normalizeDiscordId(existingHolder.discordId) !== normalizedDiscordId) {
+        const ownerLabel = existingHolder.twitterHandle
+            ? `@${existingHolder.twitterHandle}`
+            : existingHolder.discordId || "another Discord user";
+        return res.status(409).json({
+            error: `That wallet is already linked to ${ownerLabel}. Ask them to unlink it before using it on a new account.`,
+        });
+    }
 
     // ✅ Create a unique token (stored internally)
     const token = uuidv4();

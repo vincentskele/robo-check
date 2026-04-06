@@ -59,6 +59,55 @@ function loadVerifiedUsers() {
   }
 }
 
+function normalizeDiscordId(discordId) {
+  return String(discordId || '').trim();
+}
+
+function normalizeWalletAddress(walletAddress) {
+  return String(walletAddress || '').trim().toLowerCase();
+}
+
+function getActiveVerifiedUsers(verifiedUsers) {
+  const latestByDiscordId = new Map();
+
+  (Array.isArray(verifiedUsers) ? verifiedUsers : []).forEach((user, index) => {
+    if (!user?.verified) return;
+
+    const discordId = normalizeDiscordId(user.discordId);
+    const walletAddress = String(user.walletAddress || '').trim();
+    if (!discordId || !walletAddress) return;
+
+    const existing = latestByDiscordId.get(discordId);
+    const existingVerifiedAt = Number(existing?.verifiedAt) || 0;
+    const nextVerifiedAt = Number(user.verifiedAt) || 0;
+
+    if (
+      !existing ||
+      nextVerifiedAt > existingVerifiedAt ||
+      (nextVerifiedAt === existingVerifiedAt && index > existing.index)
+    ) {
+      latestByDiscordId.set(discordId, {
+        ...user,
+        discordId,
+        walletAddress,
+        twitterHandle: user.twitterHandle || null,
+        index,
+      });
+    }
+  });
+
+  const activeUsers = [...latestByDiscordId.values()]
+    .sort((left, right) => left.index - right.index)
+    .map(({ index, ...user }) => user);
+
+  const duplicateCount = (Array.isArray(verifiedUsers) ? verifiedUsers : []).filter((user) => user?.verified).length - activeUsers.length;
+  if (duplicateCount > 0) {
+    console.log(`ℹ️ Ignoring ${duplicateCount} superseded verified entr${duplicateCount === 1 ? 'y' : 'ies'} when generating holders.json`);
+  }
+
+  return activeUsers;
+}
+
 // ----------------------
 // Function: Get Token Accounts for a Wallet
 // ----------------------
@@ -114,9 +163,8 @@ async function getNftMetadata(mintAddress) {
 async function generateHoldersList() {
   console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
 
-  const verifiedUsers = loadVerifiedUsers();
+  const verifiedUsers = getActiveVerifiedUsers(loadVerifiedUsers());
   const walletInfo = verifiedUsers
-    .filter(user => user.verified)
     .map(user => ({
       walletAddress: user.walletAddress,
       discordId: user.discordId,
