@@ -53,6 +53,11 @@ body {
   margin-bottom: 20px;
 }
 
+.top-link-row {
+  margin: 0 0 18px;
+  text-align: center;
+}
+
 .brand-mark {
   width: 64px;
   height: 64px;
@@ -88,6 +93,30 @@ form {
   margin-bottom: 20px;
 }
 
+.account-panel {
+  background-color: var(--bg-content);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 600px;
+  margin-bottom: 20px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.account-panel-header h2 {
+  color: var(--accent);
+  margin: 0 0 10px;
+}
+
+.account-panel-header p {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+}
+
 /* --------------------------------------------------
    LABEL & INPUT STYLING
 -------------------------------------------------- */
@@ -97,6 +126,20 @@ label {
 }
 
 input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  font-family: 'Press Start 2P', sans-serif;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  background-color: var(--bg-dark);
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  margin-bottom: 10px;
+  box-shadow: 1px 1px 0 var(--black);
+}
+
+select {
   width: 100%;
   padding: 8px;
   font-family: 'Press Start 2P', sans-serif;
@@ -174,6 +217,153 @@ button:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
+.secondary-button {
+  background-color: #7f8fbd;
+}
+
+.secondary-button:hover {
+  background-color: #6d7dab;
+}
+
+.danger-button {
+  background-color: #d96c52;
+}
+
+.danger-button:hover {
+  background-color: #bf573e;
+}
+
+.compact-button {
+  width: auto;
+  padding: 8px 10px;
+  margin-top: 0;
+}
+
+.wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.wallet-card {
+  border: 2px solid rgba(242, 162, 75, 0.5);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.wallet-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.wallet-card-title {
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.wallet-address {
+  word-break: break-all;
+  color: #fedca8;
+}
+
+.wallet-card-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.empty-wallet-card {
+  color: var(--text-secondary);
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 999;
+}
+
+.confirm-dialog {
+  width: min(100%, 520px);
+  background: var(--bg-content);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+.confirm-dialog h2 {
+  color: var(--accent);
+  margin-top: 0;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.add-wallet-result {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 2px solid rgba(242, 162, 75, 0.4);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+}
+
+.add-wallet-status {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 2px solid rgba(127, 143, 189, 0.45);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.add-wallet-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: add-wallet-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.add-wallet-status.is-complete .add-wallet-spinner {
+  animation: none;
+  border-color: #7ad66f;
+  position: relative;
+}
+
+.add-wallet-status.is-complete .add-wallet-spinner::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0px;
+  width: 5px;
+  height: 10px;
+  border: solid #7ad66f;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+
+@keyframes add-wallet-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* --------------------------------------------------
    VERIFICATION RESULT PANEL
 -------------------------------------------------- */
@@ -203,8 +393,18 @@ button:hover {
     padding: 15px; /* Reduce padding */
   }
 
+  .account-panel {
+    width: 100%;
+    padding: 15px;
+  }
+
   input[type="text"] {
     font-size: 10px; /* Adjust input font size */
+    padding: 6px;
+  }
+
+  select {
+    font-size: 10px;
     padding: 6px;
   }
 
@@ -220,6 +420,11 @@ button:hover {
 
   .field-row button {
     width: 100%;
+  }
+
+  .wallet-card-header,
+  .confirm-actions {
+    flex-direction: column;
   }
 }
 

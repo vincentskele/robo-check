@@ -2,13 +2,18 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Connection, clusterApiUrl, PublicKey } = require('@solana/web3.js');
+const {
+  getAccountByDiscordId,
+  buildVerifiedAccountIndex,
+  readVerifiedEntries,
+  normalizeDiscordId,
+} = require('./accountStore');
 
 // ----------------------
 // Define Paths using process.cwd() so we work from your project root
 // ----------------------
 const dataDir = path.join(process.cwd(), 'src/data');
 const holdersFile = path.join(dataDir, 'holders.json');
-const verifiedFile = path.join(dataDir, 'verified.json');
 const solariansFile = path.join(dataDir, 'solarians-mintlist.json');
 
 if (!fs.existsSync(dataDir)) {
@@ -40,73 +45,6 @@ console.log(`✅ Loaded ${solariansMintList.length} solarian mint(s)`);
 // ----------------------
 const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta');
 const connection = new Connection(rpcUrl, 'processed');
-
-// ----------------------
-// Function: Load Verified Users Each Cycle
-// ----------------------
-function loadVerifiedUsers() {
-  if (!fs.existsSync(verifiedFile)) {
-    console.error(`❌ Missing file: ${verifiedFile}`);
-    process.exit(1);
-  }
-  try {
-    const verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf8'));
-    console.log(`✅ Loaded ${verifiedUsers.length} verified user(s) from ${verifiedFile}`);
-    return verifiedUsers;
-  } catch (err) {
-    console.error(`❌ Failed to parse verified file: ${err.message}`);
-    process.exit(1);
-  }
-}
-
-function normalizeDiscordId(discordId) {
-  return String(discordId || '').trim();
-}
-
-function normalizeWalletAddress(walletAddress) {
-  return String(walletAddress || '').trim().toLowerCase();
-}
-
-function getActiveVerifiedUsers(verifiedUsers) {
-  const latestByDiscordId = new Map();
-
-  (Array.isArray(verifiedUsers) ? verifiedUsers : []).forEach((user, index) => {
-    if (!user?.verified) return;
-
-    const discordId = normalizeDiscordId(user.discordId);
-    const walletAddress = String(user.walletAddress || '').trim();
-    if (!discordId || !walletAddress) return;
-
-    const existing = latestByDiscordId.get(discordId);
-    const existingVerifiedAt = Number(existing?.verifiedAt) || 0;
-    const nextVerifiedAt = Number(user.verifiedAt) || 0;
-
-    if (
-      !existing ||
-      nextVerifiedAt > existingVerifiedAt ||
-      (nextVerifiedAt === existingVerifiedAt && index > existing.index)
-    ) {
-      latestByDiscordId.set(discordId, {
-        ...user,
-        discordId,
-        walletAddress,
-        twitterHandle: user.twitterHandle || null,
-        index,
-      });
-    }
-  });
-
-  const activeUsers = [...latestByDiscordId.values()]
-    .sort((left, right) => left.index - right.index)
-    .map(({ index, ...user }) => user);
-
-  const duplicateCount = (Array.isArray(verifiedUsers) ? verifiedUsers : []).filter((user) => user?.verified).length - activeUsers.length;
-  if (duplicateCount > 0) {
-    console.log(`ℹ️ Ignoring ${duplicateCount} superseded verified entr${duplicateCount === 1 ? 'y' : 'ies'} when generating holders.json`);
-  }
-
-  return activeUsers;
-}
 
 // ----------------------
 // Function: Get Token Accounts for a Wallet
@@ -163,41 +101,49 @@ async function getNftMetadata(mintAddress) {
 async function generateHoldersList() {
   console.log(`🔄 Running generateHoldersList at ${new Date().toLocaleString()}`);
 
-  const verifiedUsers = getActiveVerifiedUsers(loadVerifiedUsers());
-  const walletInfo = verifiedUsers
-    .map(user => ({
-      walletAddress: user.walletAddress,
-      discordId: user.discordId,
-      twitterHandle: user.twitterHandle || null,
-    }));
-
-  console.log("✅ Found Wallets:", walletInfo.map(u => u.walletAddress));
+  const verifiedEntries = readVerifiedEntries();
+  const accounts = [...buildVerifiedAccountIndex(verifiedEntries).values()];
+  console.log(`✅ Loaded ${verifiedEntries.length} verified entr${verifiedEntries.length === 1 ? 'y' : 'ies'} across ${accounts.length} account(s)`);
 
   const holders = [];
 
   const metadataMap = JSON.parse(fs.readFileSync(path.join(dataDir, 'metadata.json'), 'utf8'));
 
-  for (const user of walletInfo) {
-    console.log(`🔎 Checking wallet: ${user.walletAddress}`);
-    const tokens = await getTokenAccounts(user.walletAddress);
-    const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
+  for (const account of accounts) {
+    const discordId = normalizeDiscordId(account.discordId);
+    const walletList = Array.isArray(account.wallets) ? account.wallets : [];
+    const tokenMap = new Map();
 
-    if (matchingTokens.length > 0) {
-      const tokenMetadataList = matchingTokens.map(mint => ({
-        mint,
-        metadata: metadataMap[mint] || null
-      }));
+    console.log(`🔎 Checking ${walletList.length} wallet(s) for Discord ID ${discordId}`);
 
+    for (const wallet of walletList) {
+      console.log(`   ↳ Wallet: ${wallet.walletAddress}`);
+      const tokens = await getTokenAccounts(wallet.walletAddress);
+      const matchingTokens = tokens.filter(token => solariansMintList.includes(token));
+      matchingTokens.forEach((mint) => {
+        if (!tokenMap.has(mint)) {
+          tokenMap.set(mint, {
+            mint,
+            metadata: metadataMap[mint] || null,
+          });
+        }
+      });
+    }
+
+    if (tokenMap.size > 0) {
+      const latestAccount = getAccountByDiscordId(discordId, verifiedEntries) || account;
       holders.push({
-        walletAddress: user.walletAddress,
-        discordId: user.discordId,
-        twitterHandle: user.twitterHandle,
-        tokens: tokenMetadataList,
+        walletAddress: latestAccount.primaryWalletAddress || latestAccount.walletAddress || null,
+        primaryWalletAddress: latestAccount.primaryWalletAddress || latestAccount.walletAddress || null,
+        wallets: walletList,
+        discordId,
+        twitterHandle: latestAccount.twitterHandle || null,
+        tokens: [...tokenMap.values()],
       });
 
-      console.log(`✅ ${user.walletAddress} holds ${tokenMetadataList.length} solarian token(s).`);
+      console.log(`✅ Discord ID ${discordId} holds ${tokenMap.size} solarian token(s) across ${walletList.length} wallet(s).`);
     } else {
-      console.log(`⚠️ ${user.walletAddress} holds no solarian tokens.`);
+      console.log(`⚠️ Discord ID ${discordId} holds no solarian tokens across linked wallets.`);
     }
   }
 

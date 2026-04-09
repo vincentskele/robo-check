@@ -9,6 +9,10 @@ const {
 const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
+const {
+  buildVerifiedAccountIndex,
+  readVerifiedEntries,
+} = require('./accountStore');
 
 // === Load and Validate Environment Variables ===
 const API_BASE_URL = process.env.API_BASE_URL?.trim() || "http://localhost:3000";
@@ -84,7 +88,7 @@ async function updateRoles() {
       holders = JSON.parse(fs.readFileSync(holdersFilePath, 'utf8'));
     }
     if (fs.existsSync(verifiedFilePath)) {
-      verified = JSON.parse(fs.readFileSync(verifiedFilePath, 'utf8'));
+      verified = readVerifiedEntries();
     }
   } catch (err) {
     console.error("❌ Error reading JSON files:", err);
@@ -92,7 +96,7 @@ async function updateRoles() {
   }
 
   const holderDiscordIds = new Set(holders.map(h => h.discordId));
-  const verifiedDiscordIds = new Set(verified.map(v => v.discordId));
+  const verifiedDiscordIds = new Set([...buildVerifiedAccountIndex(verified).keys()]);
 
   console.log(`✅ Holders: ${holderDiscordIds.size}, Verified: ${verifiedDiscordIds.size}`);
 

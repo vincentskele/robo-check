@@ -6,6 +6,12 @@ const express = require('express');
 const fs = require('fs');
 const http = require('http');
 const WebSocket = require('ws'); // Import WebSocket
+const {
+  dataDir,
+  verifiedFile,
+  readVerifiedEntries,
+  upsertVerifiedWallet,
+} = require('./accountStore');
 
 // Ensure required environment variables exist
 if (!process.env.LISTENER_PORT || !process.env.RECEIVING_ADDRESS || !process.env.SOLANA_RPC_URL) {
@@ -22,9 +28,7 @@ const POLL_INTERVAL = parseInt(process.env.SOLANA_POLL_INTERVAL) || 10000;
 const connection = new Connection(SOLANA_RPC_URL, "confirmed");
 
 // Paths to JSON storage
-const dataDir = path.join(__dirname, '/data');
 const tokensFile = path.join(dataDir, 'tokens.json');
-const verifiedFile = path.join(dataDir, 'verified.json');
 
 // Ensure the `data/` directory exists
 if (!fs.existsSync(dataDir)) {
@@ -86,7 +90,6 @@ const checkForTransactions = async () => {
     if (!signatures || signatures.length === 0) return;
 
     let tokens = readJson(tokensFile);
-    let verified = readJson(verifiedFile);
     const now = Date.now();
     let tokensModified = false;
 
@@ -133,8 +136,16 @@ const checkForTransactions = async () => {
 
               console.log(`✅ Payment verified for Discord ID: ${token.discordId} (Tx: ${signature})`);
 
-              // Add token to verified.json
-              verified.push(token);
+              // Add or update the linked wallet in verified.json
+              upsertVerifiedWallet({
+                ...token,
+                discordId: token.discordId,
+                twitterHandle: token.twitterHandle || null,
+                walletAddress: token.walletAddress,
+                verified: true,
+                linked: true,
+                verifiedAt: now,
+              });
               tokensModified = true;
 
               // Broadcast confirmation to WebSocket clients
@@ -160,7 +171,7 @@ const checkForTransactions = async () => {
     // If we modified tokens, save them
     if (tokensModified) {
       writeJson(tokensFile, tokens);
-      writeJson(verifiedFile, verified);
+      readVerifiedEntries();
     }
   } catch (error) {
     console.error("❌ Error checking transactions:", error);

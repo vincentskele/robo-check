@@ -12,6 +12,7 @@
     <img class="brand-mark" src="/logo.gif" alt="Robo-Check logo">
     <h1>Robo-Check Verification</h1>
   </div>
+  <p class="top-link-row"><a href="/holders">View verified holders</a></p>
 
   <form id="verificationForm">
     <label for="discordId">Discord ID:</label>
@@ -26,15 +27,58 @@
     <br>
 
     <label for="walletAddress">Your Solana Wallet:</label>
+    <select id="walletSelect" name="walletSelect" class="hidden">
+      <option value="">Custom wallet</option>
+    </select>
     <input type="text" id="walletAddress" name="walletAddress" required>
     <br>
 
     <button type="submit">Generate Verification</button>
   </form>
 
+  <section id="linkedWalletsPanel" class="account-panel hidden">
+    <div class="account-panel-header">
+      <h2>Linked Wallets</h2>
+      <p id="accountSummaryText">Connect Discord to manage your Robo-Check wallets.</p>
+    </div>
+    <div id="walletList" class="wallet-list"></div>
+    <button type="button" id="addAnotherWalletButton" class="secondary-button">Add Another Wallet</button>
+  </section>
+
+  <div id="confirmOverlay" class="confirm-overlay hidden" aria-hidden="true">
+    <div class="confirm-dialog">
+      <h2>Are You Sure?</h2>
+      <p id="confirmMessage">This action cannot be undone.</p>
+      <div class="confirm-actions">
+        <button type="button" id="confirmProceedButton">Yes, Unlink</button>
+        <button type="button" id="confirmCancelButton" class="secondary-button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addWalletOverlay" class="confirm-overlay hidden" aria-hidden="true">
+    <div class="confirm-dialog">
+      <h2>Add Another Wallet</h2>
+      <p>Paste the Solana wallet you want to link to this Discord account.</p>
+      <label for="addWalletSelect">Linked Wallets</label>
+      <select id="addWalletSelect" name="addWalletSelect">
+        <option value="">Custom wallet</option>
+      </select>
+      <label for="addWalletAddressInput">Solana Wallet</label>
+      <input type="text" id="addWalletAddressInput" name="addWalletAddressInput" placeholder="Paste wallet address">
+      <div id="addWalletResult" class="add-wallet-result hidden" aria-live="polite"></div>
+      <div id="addWalletStatus" class="add-wallet-status hidden" aria-live="polite">
+        <div class="add-wallet-spinner" aria-hidden="true"></div>
+        <div id="addWalletStatusText">Waiting for payment...</div>
+      </div>
+      <div class="confirm-actions">
+        <button type="button" id="addWalletSubmitButton">Generate Verification</button>
+        <button type="button" id="addWalletCloseButton" class="secondary-button">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="verificationResult"></div>
- <p>If easier - feel free to "/verify" in <a href="https://discord.com/channels/1014872741846974514/1336779333641179146">Discord</a> instead.</p>
- <p><a href="/holders">View verified holders</a></p>
   <script src="main.js"></script>
 </body>
 
