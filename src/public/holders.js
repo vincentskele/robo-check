@@ -42,6 +42,9 @@ const safeText = (value, fallback = 'Unknown') => {
 };
 
 const holderLabel = (holder) => {
+  if (holder.voltUsername) {
+    return holder.voltUsername;
+  }
   if (holder.twitterHandle) {
     return `@${holder.twitterHandle}`;
   }
@@ -119,6 +122,15 @@ const createTwitterLink = (handle) => {
   return link;
 };
 
+const createVoltProfileLink = (username) => {
+  const link = document.createElement('a');
+  link.href = `https://volt.solarians.world/${encodeURIComponent(username)}`;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = username;
+  return link;
+};
+
 const renderHolderList = (holders) => {
   holderListEl.innerHTML = '';
 
@@ -178,7 +190,12 @@ const renderAttributes = (attributes = []) => {
 };
 
 const renderHolderDetails = (holder) => {
-  detailTitleEl.textContent = holderLabel(holder);
+  detailTitleEl.replaceChildren();
+  if (holder.voltUsername) {
+    detailTitleEl.appendChild(createVoltProfileLink(holder.voltUsername));
+  } else {
+    detailTitleEl.textContent = holderLabel(holder);
+  }
   detailSubtitleEl.textContent = `${holder.tokens?.length || 0} Solarian${holder.tokens?.length === 1 ? '' : 's'} in wallet`;
 
   detailBodyEl.innerHTML = '';
@@ -312,7 +329,7 @@ const renderHolderDetails = (holder) => {
 const applySearch = () => {
   const query = holderSearchEl.value.trim().toLowerCase();
   const filtered = allHolders.filter((holder) => {
-    const searchSpace = [holder.twitterHandle, holder.discordId, holder.walletAddress]
+    const searchSpace = [holder.voltUsername, holder.twitterHandle, holder.discordId, holder.walletAddress]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();

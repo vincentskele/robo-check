@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -162,6 +163,7 @@ app.get('/api/discord-username/:id', async (req, res) => {
 const dataDir = path.join(__dirname, 'data');
 const tokensFile = path.join(dataDir, 'tokens.json');
 const holdersFile = path.join(dataDir, 'holders.json');
+const voltDbFile = path.resolve(__dirname, '..', '..', 'volt', 'points.db');
 
 // ✅ Ensure the `data/` Directory Exists
 if (!fs.existsSync(dataDir)) {
@@ -220,6 +222,36 @@ const readHolders = () => {
     } catch (error) {
         console.error("❌ Error reading holders.json:", error);
         return [];
+    }
+};
+
+const readVoltUsernameMap = () => {
+    try {
+        if (!fs.existsSync(voltDbFile)) {
+            return new Map();
+        }
+
+        const raw = execFileSync(
+            'sqlite3',
+            [
+                voltDbFile,
+                '-json',
+                `SELECT userID, username
+                 FROM economy
+                 WHERE username IS NOT NULL
+                   AND TRIM(username) != ''`
+            ],
+            { encoding: 'utf8' }
+        );
+        const rows = raw ? JSON.parse(raw) : [];
+        return new Map(
+            (Array.isArray(rows) ? rows : [])
+                .filter((row) => row && row.userID && row.username)
+                .map((row) => [normalizeDiscordId(row.userID), String(row.username).trim()])
+        );
+    } catch (error) {
+        console.error('❌ Error reading Volt usernames:', error);
+        return new Map();
     }
 };
 
@@ -306,12 +338,12 @@ app.post('/payment-request', (req, res) => {
 // ✅ API endpoint to return holders data
 app.get('/api/holders', (req, res) => {
     try {
-        if (!fs.existsSync(holdersFile)) {
-            return res.json([]);
-        }
-        const raw = fs.readFileSync(holdersFile, 'utf8');
-        const holders = raw ? JSON.parse(raw) : [];
-        return res.json(holders);
+        const holders = readHolders();
+        const voltUsernameMap = readVoltUsernameMap();
+        return res.json(holders.map((holder) => ({
+            ...holder,
+            voltUsername: voltUsernameMap.get(normalizeDiscordId(holder?.discordId)) || null
+        })));
     } catch (error) {
         console.error("❌ Error reading holders.json:", error);
         return res.status(500).json({ error: "Failed to read holders data" });
